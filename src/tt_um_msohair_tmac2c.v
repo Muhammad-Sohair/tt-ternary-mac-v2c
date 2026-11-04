@@ -118,6 +118,21 @@ module tt_um_msohair_tmac2c #(
   wire            x_dec;     // the RAM path computed one ARUN chunk
 
   wire bist_busy;
+
+  // Activation index for LOAD_A/LOAD_AC/LOAD_FC: cleared when SPI is idle and
+  // at every opcode, stepped per data byte, exactly as in TMAC2. It has its
+  // own block with an asynchronous reset from the synchronised rst: in the
+  // first C netlist the sync reset of a_ptr[0] was synthesised into logic that
+  // reconverges on the flop's own output (D = 0 for Q = 0 and for Q = 1), so
+  // gate-level simulation could never resolve the power-on X (notes/v2c_05).
+  // A reset flop makes the reset dominant by construction.
+  wire a_ptr_clr  = !spi_active || (rx_valid && !have_op);
+  wire a_ptr_step = rx_valid && have_op && (op == OP_LOAD_A || op == OP_LOAD_AC || op == OP_LOAD_FC);
+  always @(posedge clk or posedge rst) begin
+    if (rst)             a_ptr <= 0;
+    else if (a_ptr_clr)  a_ptr <= 0;
+    else if (a_ptr_step) a_ptr <= (a_ptr == COLS - 1) ? 0 : a_ptr + 1'b1;
+  end
   // While a RAM operation runs, opcodes that would change the array, the
   // flash stream or the RAM are refused (sticky BLOCKED); reads, STATUS,
   // SHIFT and FSTOP (which aborts) still work. With no RAM operation this
@@ -143,7 +158,6 @@ module tt_um_msohair_tmac2c #(
       op      <= OP_STATUS;
       idx     <= 8'd0;
       w_ptr   <= 0;
-      a_ptr   <= 0;
       if (rst) begin
         s_w_addr <= 0; s_a_addr <= 0; s_data <= 8'd0; s_cmp <= 1'b0; shift <= 5'd0;
         // /4 (12.5 MHz SCK), sampled 2 clk (40 ns) after the falling edge:
@@ -161,7 +175,6 @@ module tt_um_msohair_tmac2c #(
       op      <= rx_byte;
       idx     <= 8'd0;
       w_ptr   <= 0;
-      a_ptr   <= 0;
       case (rx_byte)
         OP_CMP:     s_cmp <= ~bist_busy;
         OP_CMP_CLR: begin s_cmp <= ~bist_busy; s_clr <= 1'b1; end
@@ -184,7 +197,6 @@ module tt_um_msohair_tmac2c #(
         OP_LOAD_A, OP_LOAD_AC, OP_LOAD_FC: begin
           s_a_we    <= ~bist_busy;
           s_a_addr  <= a_ptr;
-          a_ptr     <= (a_ptr == COLS - 1) ? 0 : a_ptr + 1'b1;
           s_ac_cmp  <= ~bist_busy && (op == OP_LOAD_AC) && (a_ptr == COLS - 1);
           s_fc_last <= ~bist_busy && (op == OP_LOAD_FC) && (a_ptr == COLS - 1);
         end
