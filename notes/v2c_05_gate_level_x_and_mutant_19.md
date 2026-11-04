@@ -40,6 +40,20 @@ reconvergence. Nothing else in C's netlist went X.
 synchronous clears (SPI idle, every opcode) and step (each LOAD_A/AC/FC data byte). No `initial` values. RTL
 behaviour is unchanged: test_c 9/9, A's `test.py` 14/14, `test_devkit.py` 2/2.
 
+**Second occurrence (run 41902595956).** With `a_ptr` fixed, A's non-flash tests passed at gate level, but
+3 flash tests failed ("IO0 not driven at command bit 31", rows shifted by one byte). Pin-level comparison of
+RTL and netlist, then a per-clock probe, showed `uio_out[1]` (IO0) X whenever `bitn` = 3, i.e. while IO0 carries
+`cmd_word[2]` = **`qspi_fetch.ptr[2]`**: the same reconvergent-reset pattern, now in C's new byte pointer (the
+re-synthesis after the `a_ptr` change restructured it). A's testbench skips unresolvable pin events, so it
+missed one SCK rise: 31 command bits, then everything one byte late. The post-reset X scan on that netlist
+found only this chain. **Fix:** `ptr` moved to its own block with an asynchronous reset (hold on stop, load
+`{page, 8'h00}` on start, +1 per delivered byte: unchanged behaviour).
+
+**Fast local loop.** To stop chasing this one re-synthesis at a time, the CI's flow is run locally (LibreLane
+3.0.14 in WSL Docker, same config) from synthesis to PDN generation (~1 min), and the post-reset X scan plus
+A's full gate-level suite and `test_c` run on that powered netlist. On the fixed RTL the netlist is X-free;
+A's GL suite 13/13 + the slow internal-saturation test 1/1, `test_c` GL 10/10.
+
 Why not keep it synchronous and hope: whether a synchronous reset survives as a dominant term depends on
 ABC's restructuring, which changed between A and C for unrelated reasons; a reset flop does not.
 

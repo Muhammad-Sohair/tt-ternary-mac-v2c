@@ -112,6 +112,18 @@ module qspi_fetch #(
 
   always @(posedge clk) in_q <= io_in;
 
+  // Byte pointer, in its own block with an asynchronous reset from the
+  // (synchronised) rst: as a synchronous-reset register, synthesis merged its
+  // reset into logic that reconverges on its own Q, and gate-level simulation
+  // could not clear the power-on X (notes/v2c_05). Same behaviour: held by
+  // stop, loaded with {page, 8'h00} by start, +1 per delivered byte.
+  always @(posedge clk or posedge rst) begin
+    if (rst)                    ptr <= 24'd0;
+    else if (stop)              ptr <= ptr;
+    else if (start)             ptr <= {page, 8'h00};
+    else if (grab && !hi_half)  ptr <= ptr + 24'd1;
+  end
+
   always @(posedge clk) begin
     evs <= {evs[3:0], launch};
     if (rst || stop) begin
@@ -125,7 +137,7 @@ module qspi_fetch #(
       nib_in  <= 4'd0;
       hi_half <= 1'b1;
       waddr   <= 0;
-      if (rst) begin bitn <= 6'd0; hi_nib <= 4'd0; ptr <= 24'd0; end
+      if (rst) begin bitn <= 6'd0; hi_nib <= 4'd0; end
     end else if (start) begin
       // Restart: raise /CS for one SCK phase, then issue the new command.
       state   <= S_GAP;
@@ -136,7 +148,6 @@ module qspi_fetch #(
       evs     <= 5'd0;
       nib_in  <= 4'd0;
       waddr   <= 0;
-      ptr     <= {page, 8'h00};
     end else begin
       if (hcnt != 3'd0) hcnt <= hcnt - 3'd1;
 
@@ -145,10 +156,7 @@ module qspi_fetch #(
         nib_in  <= nib_in - 4'd1;
         hi_half <= ~hi_half;
         if (hi_half) hi_nib <= in_q;
-        else begin
-          waddr <= (waddr == CHUNK - 1) ? 0 : waddr + 1'b1;
-          ptr   <= ptr + 24'd1;
-        end
+        else waddr <= (waddr == CHUNK - 1) ? 0 : waddr + 1'b1;
       end
 
       case (state)
