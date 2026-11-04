@@ -28,7 +28,7 @@
   ],
   "CTS_SINK_CLUSTERING_SIZE": 10,
   "DESIGN_REPAIR_MAX_SLEW_PCT": 40,
-  "GRT_DESIGN_REPAIR_MAX_SLEW_PCT": 55,
+  "GRT_DESIGN_REPAIR_MAX_SLEW_PCT": 20,
   "MAX_FANOUT_CONSTRAINT": 8,
   "GRT_ANTENNA_REPAIR_JUMPER_ONLY": true,
   "RUN_POST_GRT_DESIGN_REPAIR": true,
@@ -47,5 +47,61 @@
   "RUN_CTS": 1,
   "FP_PDN_MULTILAYER": 0,
   "MAGIC_DEF_LABELS": 0,
-  "MAGIC_WRITE_LEF_PINONLY": 1
+  "MAGIC_WRITE_LEF_PINONLY": 1,
+  "LAYERS_RC": {
+    "nom_*": {
+      "met1": {
+        "res": 0.0009051,
+        "cap": 0.0001754
+      },
+      "met2": {
+        "res": 0.0009005,
+        "cap": 0.0001597
+      },
+      "met3": {
+        "res": 0.0001556,
+        "cap": 0.0002008
+      },
+      "met4": {
+        "res": 0.0001583,
+        "cap": 0.0001795
+      }
+    },
+    "min_*": {
+      "met1": {
+        "res": 0.0007603,
+        "cap": 0.0001557
+      },
+      "met2": {
+        "res": 0.0007564,
+        "cap": 0.0001425
+      },
+      "met3": {
+        "res": 0.0001257,
+        "cap": 0.0001777
+      },
+      "met4": {
+        "res": 0.000128,
+        "cap": 0.000166
+      }
+    },
+    "max_*": {
+      "met1": {
+        "res": 0.0010499,
+        "cap": 0.0001855
+      },
+      "met2": {
+        "res": 0.0010446,
+        "cap": 0.0001861
+      },
+      "met3": {
+        "res": 0.0001854,
+        "cap": 0.0002127
+      },
+      "met4": {
+        "res": 0.0001886,
+        "cap": 0.0001903
+      }
+    }
+  }
 }

@@ -242,6 +242,69 @@ class TMAC2(TMAC):
         return self.f_samp << 2 | self.f_div
 
 
+# ---------------- v2c: activations kept in the Pmod PSRAM (option C) ----------------
+# Functional semantics only; opcodes and argument layout are provisional (notes/v2c_02_spec.md).
+OP_AWRITE, OP_ARUN = 0xA0, 0xA1      # [PROVISIONAL]
+PSRAM_UNWRITTEN = 0x00               # [PENDING DATASHEET] power-up content is undefined; tests always write first
+
+
+def pack_acts(x, chunks):
+    """Activation vector (int8 values) -> PSRAM bytes: K padded with zeros to chunks * COLS, two's
+    complement, in the order ARUN consumes them (chunk 0 columns 0..4, chunk 1, ...)."""
+    assert len(x) <= chunks * COLS
+    return [v & 0xFF for v in x] + [0] * (chunks * COLS - len(x))
+
+
+class TMAC2C(TMAC2):
+    """TMAC2 plus an activation store in PSRAM.
+
+    AWRITE base, data : the chip writes the bytes to PSRAM starting at byte address `base`.
+    ARUN base, n      : n chunks of LOAD_FC with the activations read from PSRAM at `base` instead
+                        of from SPI; the weights come from the open flash stream exactly as in TMAC2.
+    The array, accumulators, readout and every v1/v2 command are unchanged."""
+
+    def __init__(self, flash=None, psram=None):
+        self.psram = dict(psram or {})
+        super().__init__(flash)
+
+    def awrite(self, base, data):
+        for i, b in enumerate(data):
+            self.psram[base + i] = b & 0xFF
+
+    def arun(self, base, nchunks):
+        acts = [self.psram.get(base + i, PSRAM_UNWRITTEN) for i in range(nchunks * COLS)]
+        self.load_fc(acts)
+
+
+def matvec_c(W, x, flash_page=1, act_base=0):
+    """Reference y = W x through the option-C flow: weights in flash, x written to PSRAM once, then
+    per row group CLEAR + ARUN + read. Returns the per-group raw accumulators and the model."""
+    stream, groups, chunks = pack_stream(W)
+    m = TMAC2C(flash={(flash_page << 8) + i: b for i, b in enumerate(stream)})
+    m.awrite(act_base, pack_acts(x, chunks))
+    m.fstart(flash_page)
+    out = []
+    for _ in range(groups):
+        m.clear()
+        m.arun(act_base, chunks)
+        out.append(list(m.acc))
+    return out, m
+
+
+def _self_check_c(seed=7):
+    """The option-C flow must give the same numbers as plain integer arithmetic."""
+    import random
+    rng = random.Random(seed)
+    for n, k in ((4, 5), (7, 13), (9, 40)):
+        W = [[rng.choice((-1, 0, 1)) for _ in range(k)] for _ in range(n)]
+        x = [rng.randrange(-128, 128) for _ in range(k)]
+        got, _ = matvec_c(W, x)
+        flat = [v for g in got for v in g][:n]
+        want = [sum(w * a for w, a in zip(row, x)) for row in W]
+        assert flat == want, (n, k, flat, want)
+    return True
+
+
 def write_rtl_constants(sig):
     import pathlib
     import re

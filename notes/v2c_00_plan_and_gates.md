@@ -32,3 +32,4 @@ PC does not re-send them over SPI. Nothing else changes from A.
 | date | status |
 |---|---|
 | 4 Nov | Seed created; B archive and A integrity checks passed (A `main` 2c24307 green, src/info.yaml/docs identical to `signoff-a`, no commits since 29 Oct). |
+| 4 Nov | Seed RTL 14/14 locally; seed CI queued. Track 2 setup: `test/psram_model.py` (pin-level RAM engine, every datasheet value a parameter, 6/6 self-tests with placeholder values), golden model `TMAC2C`/`matvec_c` (self-checked), hardening config = A + lrc2 `LAYERS_RC` + post-GRT margin 20, spec draft v2c_02. **Found: A's flash controller only opens at page boundaries, so interleaving RAM reads needs a byte-address resume in `qspi_fetch` ([DECISION] R1).** |
