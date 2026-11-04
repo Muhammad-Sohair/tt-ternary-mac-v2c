@@ -243,9 +243,9 @@ class TMAC2(TMAC):
 
 
 # ---------------- v2c: activations kept in the Pmod PSRAM (option C) ----------------
-# Functional semantics only; opcodes and argument layout are provisional (notes/v2c_02_spec.md).
-OP_AWRITE, OP_ARUN = 0xA0, 0xA1      # [PROVISIONAL]
-PSRAM_UNWRITTEN = 0x00               # [PENDING DATASHEET] power-up content is undefined; tests always write first
+# Opcodes and argument layout: docs/info.md and notes/v2c_02_spec.md.
+OP_AWRITE, OP_ARUN, OP_AINIT, OP_ASTAT = 0xA0, 0xA1, 0xA2, 0xA3
+PSRAM_UNWRITTEN = 0x00               # power-up content is undefined (APS6404L); tests always write first
 
 
 def pack_acts(x, chunks):
@@ -267,13 +267,77 @@ class TMAC2C(TMAC2):
         self.psram = dict(psram or {})
         super().__init__(flash)
 
+    def reset(self):
+        super().reset()
+        self.a_init = False
+        self.err_div = self.err_stream = self.overrun = self.noinit = self.aborted = self.blocked = False
+        self.f_paused = False                 # flash /CS high with the chunk held (RAM used the bus)
+
+    # flash stream: a paused stream is still "ready"; LOAD_FC / ARUN resume it
+    def fstart(self, page):
+        super().fstart(page)
+        self.f_paused = False
+
+    def fstop(self):
+        super().fstop()
+        self.f_paused = False
+
+    def load_fc(self, acts):
+        if acts:
+            self.f_paused = False
+        super().load_fc(acts)
+
+    def fstat(self):
+        busy = self.f_open and not self.f_ready
+        opened = self.f_open and not self.f_paused
+        return (opened << 7 | busy << 6 | self.f_ready << 5
+                | self.f_pend << 4 | self.f_overrun << 3 | 0b010)
+
+    def _bus(self):
+        """A RAM command takes the bus: an open flash stream is paused, its chunk stays."""
+        if self.f_open:
+            self.f_paused = True
+
+    def _div_bad(self):
+        return self.f_div == 3
+
+    def ainit(self):
+        self.err_div = self.err_stream = self.overrun = self.noinit = self.aborted = self.blocked = False
+        self.a_init = False
+        if self._div_bad():
+            self.err_div = True
+            return
+        self._bus()
+        self.a_init = True
+
     def awrite(self, base, data):
         for i, b in enumerate(data):
-            self.psram[base + i] = b & 0xFF
+            if not self.a_init:
+                self.noinit = True
+            elif self._div_bad():
+                self.err_div = True
+            else:
+                self._bus()
+                self.psram[base + i] = b & 0xFF
 
     def arun(self, base, nchunks):
+        if nchunks == 0:
+            return
+        if not self.a_init:
+            self.noinit = True
+            return
+        if self._div_bad():
+            self.err_div = True
+            return
+        if not self.f_ready:
+            self.err_stream = True
+            return
         acts = [self.psram.get(base + i, PSRAM_UNWRITTEN) for i in range(nchunks * COLS)]
         self.load_fc(acts)
+
+    def astat(self, busy=False):
+        return (busy << 7 | self.a_init << 6 | self.err_div << 5 | self.err_stream << 4
+                | self.overrun << 3 | self.noinit << 2 | self.aborted << 1 | self.blocked)
 
 
 def matvec_c(W, x, flash_page=1, act_base=0):
@@ -281,6 +345,7 @@ def matvec_c(W, x, flash_page=1, act_base=0):
     per row group CLEAR + ARUN + read. Returns the per-group raw accumulators and the model."""
     stream, groups, chunks = pack_stream(W)
     m = TMAC2C(flash={(flash_page << 8) + i: b for i, b in enumerate(stream)})
+    m.ainit()
     m.awrite(act_base, pack_acts(x, chunks))
     m.fstart(flash_page)
     out = []

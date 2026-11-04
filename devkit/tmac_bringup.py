@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""TMAC2 silicon bring-up for the Tiny Tapeout demo board (MicroPython).
+"""TMAC2C silicon bring-up for the Tiny Tapeout demo board (MicroPython).
 
 Copy this file and test/tmac_model.py to the board, plug the TT QSPI Pmod into the
 bidirectional Pmod header, then:
     import tmac_bringup; tmac_bringup.run_all(tt)        # v1 stages S1-S8 (no Pmod needed)
     tmac_bringup.run_flash(tt)                           # flash stages F1-F5
+    tmac_bringup.run_ram(tt)                             # TMAC2C RAM stages R1-R3 (after run_flash)
 
 Board API used (tt-micropython-firmware README and src/ttboard): tt.shuttle.<name>.enable(),
 tt.shuttle.disable() (selects project 0, tt_um_chip_rom, whose uio_oe is 0), tt.ui_in[n] = v,
@@ -20,6 +21,13 @@ The F stages need the flash. TMAC2 drives flash /CS, SCK and both PSRAM /CS when
 selected, so the RP2 can only reach the flash with another project selected: flash_board()
 selects project 0 and drives the Pmod itself, flash_chip() hands the pins back and selects TMAC2.
 test/test_devkit.py runs this file against the RTL (S1, S3, F2-F5) and a bit-level W25Q model.
+
+The R stages (TMAC2C) use RAM A on the same Pmod. RAM-mode clock range: the RAM path needs SCK
+between 6.25 and 25 MHz, i.e. the project clock at 50 MHz with FCFG divider /8, /4 or /2 (the
+APS6404L allows /CE low for at most 8 us, and the longest RAM burst is 40 SCK; the chip refuses RAM
+commands at /16). Below about 10 MHz project clock no divider is fast enough, so run_ram() raises the
+project clock to RAM_HZ and restores PROJECT_HZ afterwards. Everything in S and F works unchanged on
+TMAC2C; if the R stages fail, the chip is still a complete TMAC2.
 """
 
 import time
@@ -40,6 +48,9 @@ FL_DRIVE = 0xFF & ~(1 << FL_IO1)                                           # IO1
 
 OP_LOAD_FC, OP_FCFG, OP_FSTART, OP_FSTOP, OP_FSTAT = 0x22, 0x90, 0x91, 0x92, 0x93
 FCFG_RESET = 0x05               # sample 2 clk, SCK = clk/4
+OP_AWRITE, OP_ARUN, OP_AINIT, OP_ASTAT = 0xA0, 0xA1, 0xA2, 0xA3
+RAM_HZ = 50_000_000             # RAM-mode project clock: SCK 25 / 12.5 / 6.25 MHz at FCFG /2, /4, /8
+RAM_DIVS = (2, 1)               # /8 and /4 always; /2 only after F4 has found a sample delay that works
 FLASH_PAGE = 0x0001             # F2 image at 0x000100 (as in docs/info.md); F3, F4 at pages 0x0010, 0x0040:
                                 # each stage has its own 4 KB sector because fl_write erases whole sectors
 
@@ -522,5 +533,92 @@ def run_flash(tt, set_qe=False, window_hz=50_000_000):
     out["F3"] = f3_matvec(tt)
     out["F4"] = f4_window(tt, window_hz)
     out["F5"] = f5_stop_and_bist(tt)
+    print("SUMMARY", out)
+    return out
+
+
+# ---------------- TMAC2C: activations in RAM A ----------------
+def astat(tt):
+    return xfer(tt, [OP_ASTAT], 1)[1]
+
+
+def wait_ram(tt, limit_ms=2000):
+    t0 = time.ticks_ms() if hasattr(time, "ticks_ms") else 0
+    for _ in range(limit_ms):
+        if not astat(tt) & 0x80:
+            return True
+        time.sleep_ms(1)
+    del t0
+    return False
+
+
+def r1_init(tt):
+    """ASTAT is 0x00 on TMAC2C after reset (0x81-style STATUS on TMAC2); AINIT resets RAM A."""
+    a0 = astat(tt)
+    xfer(tt, [OP_AINIT])
+    ok = wait_ram(tt)
+    a1 = astat(tt)
+    print("R1 ASTAT after reset 0x%02x (want 0x00), after AINIT 0x%02x (want 0x40)" % (a0, a1))
+    return a0 == 0x00 and ok and a1 == 0x40
+
+
+def r2_hand_example(tt, page=FLASH_PAGE):
+    """F2 again, with the activations 1..5 read from RAM A by ARUN: row 0 = 15."""
+    xfer(tt, [OP_AWRITE, 0, 0, 0] + list(range(1, M.COLS + 1)))
+    wait_ram(tt)
+    xfer(tt, [OP_FSTART, page >> 8, page & 0xFF])
+    wait_ready(tt)
+    xfer(tt, [0x70])
+    xfer(tt, [OP_ARUN, 0, 0, 0, 0, 1])
+    done = wait_ram(tt)
+    raw = read_raw(tt)
+    a = astat(tt)
+    xfer(tt, [OP_FSTOP])
+    want = [M.COLS * (M.COLS + 1) // 2, 0, 0, 0]
+    print("R2 RAM hand example: raw", raw, "(want %s), ASTAT 0x%02x (want 0x40)" % (want, a))
+    return done and raw == want and a == 0x40
+
+
+def r3_matvec(tt, seed=9, shapes=((8, 10), (10, 13), (4, 45)), page=0x0010, divs=RAM_DIVS, samp=1):
+    """Random y = W x with x in RAM A, at each RAM-mode divider, bit-exact against the model."""
+    rng, ok = Rng(seed), True
+    for div in divs:
+        xfer(tt, [OP_FCFG, samp << 2 | div])
+        for n, k in shapes:
+            W, x = rand_w(rng, n, k), rand_x(rng, k)
+            stream, groups, chunks = M.pack_stream(W)
+            flash_board(tt)
+            fl_write(tt, page << 8, stream)
+            flash_chip(tt, RAM_HZ)
+            xfer(tt, [OP_FCFG, samp << 2 | div])
+            xfer(tt, [OP_AINIT]); wait_ram(tt)
+            xa = M.pack_acts(x, chunks)
+            xfer(tt, [OP_AWRITE, 0, 0, 0] + xa); wait_ram(tt)
+            xfer(tt, [OP_FSTART, page >> 8, page & 0xFF]); wait_ready(tt)
+            ys = []
+            for _ in range(groups):
+                xfer(tt, [0x70])
+                xfer(tt, [OP_ARUN, 0, 0, 0, chunks >> 8, chunks & 0xFF])
+                wait_ram(tt)
+                ys += read_raw(tt)
+            want = [sum(w * v for w, v in zip(row, x)) for row in W]
+            good = ys[:n] == want and astat(tt) == 0x40
+            ok = ok and good
+            print("R3 /%d %dx%d: %s" % (2 << div, n, k, "ok" if good else "FAIL"))
+            xfer(tt, [OP_FSTOP])
+    xfer(tt, [OP_FCFG, FCFG_RESET])
+    return ok
+
+
+def run_ram(tt):
+    """RAM stages at RAM_HZ. Run after run_flash (F1 must have passed: same Pmod, flash needed)."""
+    reset(tt)
+    tt.clock_project_PWM(RAM_HZ)
+    time.sleep_ms(5)
+    out = {"R1": r1_init(tt)}
+    if out["R1"]:
+        out["R2"] = r2_hand_example(tt)
+        out["R3"] = r3_matvec(tt)
+    tt.clock_project_PWM(PROJECT_HZ)
     print("SUMMARY", out)
     return out

@@ -10,8 +10,15 @@
  * Timing source: notes/v2_02_flash_timing.md.
  *
  *   start    : (re)issue the command at {page, 8'h00} and fetch the first chunk
- *   next     : fetch the next chunk (CHUNK bytes) from the open stream
+ *   next     : fetch the next chunk (CHUNK bytes) from the open stream; if the
+ *              stream is paused, first re-issue the command at the byte pointer
+ *   pause    : (TMAC2C) with a chunk held, raise /CS so another device can use
+ *              the shared Pmod bus; the chunk stays delivered (ready stays 1)
  *   stop     : raise /CS
+ *
+ * TMAC2C change (owner's decision R1, notes/v2c_02): the address is a 24-bit
+ * byte pointer that advances with every delivered byte, so a paused stream
+ * resumes at the next byte. Without pause the module behaves exactly as A's.
  *
  * Each received byte is presented for one cycle on we/waddr/wbyte, with
  * waddr = 0..CHUNK-1 (combinational: the core registers its write port).
@@ -35,6 +42,7 @@ module qspi_fetch #(
     input  wire        start,
     input  wire        next,
     input  wire        stop,
+    input  wire        pause,
     input  wire [15:0] page,               // address[23:8]; must not change while /CS is low
     input  wire [1:0]  div,                // SCK = clk/2, /4, /8, /16
     input  wire [1:0]  samp,               // sample 1..4 clk after the falling-edge clock
@@ -61,7 +69,8 @@ module qspi_fetch #(
                    S_DUMMY = 3'd3,         // 8 dummy clocks
                    S_DATA  = 3'd4,         // SCK running, nibbles arriving
                    S_DRAIN = 3'd5,         // SCK stopped, waiting for the last nibble
-                   S_HOLD  = 3'd6;         // chunk delivered, SCK stopped, /CS low
+                   S_HOLD  = 3'd6,         // chunk delivered, SCK stopped, /CS low
+                   S_PAUSE = 3'd7;         // chunk delivered, /CS high, bus free
 
   reg [2:0]  state;
   reg        sck_q, csn_q, oe_q;
@@ -73,6 +82,7 @@ module qspi_fetch #(
   reg [3:0]  hi_nib;
   reg [4:0]  evs;                          // evs[k]: a launching fall happened k clk ago
   reg [3:0]  in_q;                         // free-running input register
+  reg [23:0] ptr;                          // byte address of the next byte to deliver
 
   wire [2:0] half = (3'd1 << div) - 3'd1;  // clk cycles per SCK phase, minus 1
   wire       tick = (hcnt == 3'd0);
@@ -86,15 +96,16 @@ module qspi_fetch #(
   wire launch = fall_now && ((state == S_DATA) || (state == S_DUMMY && bitn == 6'd1));
 
   // The command word is never copied: IO0 picks bit (bitn - 1) of it, and
-  // bitn steps down on each SCK fall. Address bits [7:0] are always zero.
-  wire [31:0] cmd_word = {CMD, page, 8'h00};
+  // bitn steps down on each SCK fall. ptr does not move while the command is
+  // sent (no byte is delivered then).
+  wire [31:0] cmd_word = {CMD, ptr};
 
   assign sck     = sck_q;
   assign csn     = csn_q;
   assign io0_out = cmd_word[bitn[4:0] - 5'd1];
   assign io0_oe  = oe_q;
-  assign busy    = (state != S_IDLE) && (state != S_HOLD);
-  assign ready   = (state == S_HOLD);
+  assign busy    = (state != S_IDLE) && (state != S_HOLD) && (state != S_PAUSE);
+  assign ready   = (state == S_HOLD) || (state == S_PAUSE);
   assign open_   = ~csn_q;
   assign we      = grab && !hi_half;
   assign wbyte   = {hi_nib, in_q};
@@ -114,7 +125,7 @@ module qspi_fetch #(
       nib_in  <= 4'd0;
       hi_half <= 1'b1;
       waddr   <= 0;
-      if (rst) begin bitn <= 6'd0; hi_nib <= 4'd0; end
+      if (rst) begin bitn <= 6'd0; hi_nib <= 4'd0; ptr <= 24'd0; end
     end else if (start) begin
       // Restart: raise /CS for one SCK phase, then issue the new command.
       state   <= S_GAP;
@@ -125,6 +136,7 @@ module qspi_fetch #(
       evs     <= 5'd0;
       nib_in  <= 4'd0;
       waddr   <= 0;
+      ptr     <= {page, 8'h00};
     end else begin
       if (hcnt != 3'd0) hcnt <= hcnt - 3'd1;
 
@@ -133,7 +145,10 @@ module qspi_fetch #(
         nib_in  <= nib_in - 4'd1;
         hi_half <= ~hi_half;
         if (hi_half) hi_nib <= in_q;
-        else waddr <= (waddr == CHUNK - 1) ? 0 : waddr + 1'b1;
+        else begin
+          waddr <= (waddr == CHUNK - 1) ? 0 : waddr + 1'b1;
+          ptr   <= ptr + 24'd1;
+        end
       end
 
       case (state)
@@ -188,6 +203,18 @@ module qspi_fetch #(
           nib_in  <= 2 * CHUNK;
           hi_half <= 1'b1;
           hcnt    <= half;
+        end else if (pause) begin
+          state <= S_PAUSE;                // SCK is already low: /CS up is a clean end
+          csn_q <= 1'b1;
+        end
+        S_PAUSE: if (next) begin
+          // Re-open at the byte pointer: same path as start, without reloading it.
+          // /CS has been high since the pause (>= tSHSL1 by the GAP phase too).
+          state   <= S_GAP;
+          hcnt    <= half;
+          evs     <= 5'd0;
+          nib_in  <= 4'd0;
+          waddr   <= 0;
         end
         default: ;
       endcase

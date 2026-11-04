@@ -33,23 +33,47 @@ class PsramTiming:
     page_bytes: int            # page size for the burst rule below
     linear_burst_crosses_page: bool  # True: linear burst continues into the next page
     size_bytes: int = 8 * 1024 * 1024
+    # --- test policy (not datasheet values) ---
+    # SCK must run without a pause while /CE is low (a pause counts against tCEM and the RAM
+    # cannot refresh, 9.6). Any two consecutive SCK edges (or /CE edge and SCK edge) further
+    # apart than this inside a burst fail the test. 200 ns covers the slowest allowed SCK
+    # (clk/8 at 50 MHz: 80 ns phases) plus the /CE setup phase.
+    max_sck_gap_ns: float = 200.0
     commands: frozenset = field(default_factory=lambda: frozenset(
         {0x03, 0x0B, 0xEB, 0x02, 0x38, 0x35, 0xF5, 0x66, 0x99}))
 
 
+class PsramViolation(AssertionError):
+    """A datasheet rule was broken. In strict mode (the default) this is raised at once, so the
+    test fails at the offending pin change, not just in a final error list."""
+
+
 class Psram:
     """One PSRAM chip. Call pins(t_ns, cs_n, sck, io_from_bus) on every change; .drive is the
-    nibble the RAM puts on IO0..IO3 (bit k = IOk) and .oe which lines it drives (0 = none)."""
+    nibble the RAM puts on IO0..IO3 (bit k = IOk) and .oe which lines it drives (0 = none).
 
-    def __init__(self, timing: PsramTiming, name="ram"):
-        self.t, self.name = timing, name
+    Checked properties (each a PsramViolation in strict mode):
+      /CE low longer than tCEM; /CE high shorter than tCPH; a linear burst crossing a second page
+      boundary; an SCK pause inside a burst (max_sck_gap_ns); a read or write before the power-up
+      reset sequence (66h then 99h); mode-0 violations; partial commands; unsupported opcodes."""
+
+    def __init__(self, timing: PsramTiming, name="ram", strict=True, powered_up_reset_done=False):
+        self.t, self.name, self.strict = timing, name, strict
         self.mem = {}
         self.errors, self.log = [], []
+        self.reset_done = powered_up_reset_done   # APS6404L: reset 66h+99h required after power-up
+        self._rst_enable = False
+        self.t_last_edge = None
         self.qpi = False
         self.cs, self.sck = 1, 0
         self.t_cs_fall = self.t_cs_rise = None
         self.drive, self.oe = 0xF, 0
         self.pending = []                     # (time, nibble, oe) output events
+
+    def _err(self, msg):
+        self.errors.append(msg)
+        if self.strict:
+            raise PsramViolation(msg)
 
     # ---- bus side ----
     def outputs_at(self, t_ns):
@@ -70,24 +94,28 @@ class Psram:
                 keep.append(ev)
         self.pending = keep
 
+        if cs_n != self.cs or sck != self.sck:           # an edge on /CE or SCK
+            if self.cs == 0 and self.t_last_edge is not None and t_ns - self.t_last_edge > self.t.max_sck_gap_ns:
+                self._err(f"{self.name}: SCK paused {t_ns - self.t_last_edge:.0f} ns inside a burst")
+            self.t_last_edge = t_ns
         if cs_n != self.cs:
             if sck:
-                self.errors.append(f"{self.name}: SCK high on a /CS edge (not mode 0)")
+                self._err(f"{self.name}: SCK high on a /CS edge (not mode 0)")
             if cs_n == 0:
                 if self.t_cs_rise is not None and t_ns - self.t_cs_rise < self.t.t_cph_min_ns:
-                    self.errors.append(f"{self.name}: /CS high {t_ns - self.t_cs_rise:.1f} ns < tCPH")
+                    self._err(f"{self.name}: /CS high {t_ns - self.t_cs_rise:.1f} ns < tCPH")
                 self.t_cs_fall = t_ns
                 self._start()
             else:
                 if self.t_cs_fall is not None and t_ns - self.t_cs_fall > self.t.t_cem_max_ns:
-                    self.errors.append(f"{self.name}: /CS low {t_ns - self.t_cs_fall:.0f} ns > tCEM")
+                    self._err(f"{self.name}: /CS low {t_ns - self.t_cs_fall:.0f} ns > tCEM")
                 self.t_cs_rise = t_ns
                 self._end()
                 self.drive, self.oe, self.pending = 0xF, 0, []
             self.cs = cs_n
         elif not cs_n and sck != self.sck:
             if self.t_cs_fall is not None and t_ns - self.t_cs_fall > self.t.t_cem_max_ns:
-                self.errors.append(f"{self.name}: clocked {t_ns - self.t_cs_fall:.0f} ns after /CS fall > tCEM")
+                self._err(f"{self.name}: clocked {t_ns - self.t_cs_fall:.0f} ns after /CS fall > tCEM")
             if sck:
                 self._rise(io)
             else:
@@ -115,18 +143,23 @@ class Psram:
             if self.phase == "cmd" and self.bits == 8:
                 self.cmd, self.sreg, self.bits = self.sreg, 0, 0
                 self.log.append(self.cmd)
+                if self.cmd not in (0x66, 0x99) and not self.reset_done:
+                    self._err(f"{self.name}: command 0x{self.cmd:02x} before the power-up reset (66h, 99h)")
                 if self.cmd not in self.t.commands:
-                    self.errors.append(f"{self.name}: unsupported command 0x{self.cmd:02x}")
+                    self._err(f"{self.name}: unsupported command 0x{self.cmd:02x}")
                     self.phase = "ignore"
                 elif self.cmd == 0x35:
                     self.qpi, self.phase = True, "done"
                 elif self.cmd == 0xF5:
                     if not self.qpi:
-                        self.errors.append(f"{self.name}: 0xF5 outside QPI")
+                        self._err(f"{self.name}: 0xF5 outside QPI")
                     self.qpi, self.phase = False, "done"
                 elif self.cmd in (0x66, 0x99):
                     if self.cmd == 0x99:
+                        if not self._rst_enable:
+                            self._err(f"{self.name}: 99h without a preceding 66h")
                         self.qpi = False
+                        self.reset_done = True
                     self.phase = "done"
                 else:
                     self.phase = "addr"
@@ -179,16 +212,38 @@ class Psram:
             # APS6404L 9.2: a linear burst may cross a page boundary one time only
             if (nxt - self.start_addr) > self.t.page_bytes or \
                (self.start_addr // self.t.page_bytes) != (self.addr // self.t.page_bytes):
-                self.errors.append(f"{self.name}: burst from 0x{self.start_addr:x} crosses a second page boundary")
+                self._err(f"{self.name}: burst from 0x{self.start_addr:x} crosses a second page boundary")
         if nxt % self.t.page_bytes == 0 and not self.t.linear_burst_crosses_page:
             nxt -= self.t.page_bytes          # wrap inside the page
         self.addr = nxt % self.t.size_bytes
 
     def _end(self):
+        self._rst_enable = (self.cmd == 0x66 and self.phase == "done")
         if self.phase in ("cmd", "addr") and self.bits:
-            self.errors.append(f"{self.name}: /CS rose mid-{self.phase} after {self.bits} bits")
+            self._err(f"{self.name}: /CS rose mid-{self.phase} after {self.bits} bits")
         if self.phase == "wdata" and self.wnib:
-            self.errors.append(f"{self.name}: /CS rose mid-byte in a write")
+            self._err(f"{self.name}: /CS rose mid-byte in a write")
+
+
+# APS6404L-3SQR-SN (U2/U3 on mole99/qspi-pmod schematic v2.2), AP Memory datasheet Rev 2.7, 5 Jan 2024.
+# Checked against the PDF text on 4 Nov 2026 (notes/v2c_01_datasheets.md).
+APS6404L_3SQR_SN = PsramTiming(
+    t_cem_max_ns=8000,         # Table 10, tCEM 8 us, standard grade (-SN: Tc -40..85 C, Table 1)
+    t_cph_min_ns=18,           # Table 10, tCPH
+    t_valid_ns=5.5 + 20,       # Table 10 tACLK max 5.5 ns + TT mux/pad round trip ~20 ns (tinytapeout.com/specs)
+    t_hold_ns=1.5,             # Table 10 tKOH min (pads only add delay, so this is the pessimistic hold)
+    wait_fast_read=8,          # 9.5 truth table: 0Bh SPI 8 wait cycles
+    wait_quad_read=6,          # EBh SPI mode: 6
+    wait_qpi_read=6,           # EBh QPI mode: 6
+    page_bytes=1024,           # 9.2: 1K page (CA[9:0])
+    linear_burst_crosses_page=True,  # 9.2: linear burst crosses a page boundary, once per burst
+)
+
+
+def check_exclusive_select(cs_flash, cs_a, cs_b):
+    """The flash and both RAMs share SCK and IO0..IO3 [PENDING DATASHEET: confirm in v2c_01]:
+    at most one /CS may be low."""
+    return (cs_flash == 0) + (cs_a == 0) + (cs_b == 0) <= 1
 
 
 # APS6404L-3SQR-SN (U2/U3 on mole99/qspi-pmod schematic v2.2), AP Memory datasheet Rev 2.7, 5 Jan 2024.
@@ -251,9 +306,20 @@ def _cmd(m, op, qpi):
     m.send(op, 8, 4 if qpi else 1)
 
 
-def test_quad_write_then_quad_read():
-    r = Psram(_PLACEHOLDER)
+def _reset(m):
+    m.select(); _cmd(m, 0x66, False); m.deselect()
+    m.select(); _cmd(m, 0x99, False); m.deselect()
+
+
+def _ram(timing=_PLACEHOLDER, strict=True):
+    r = Psram(timing, strict=strict)
     m = _Master(r)
+    _reset(m)
+    return r, m
+
+
+def test_quad_write_then_quad_read():
+    r, m = _ram()
     m.select(); _cmd(m, 0x38, False); m.send(0x000100, 24, 4); m.send(0xA55A1234, 32, 4); m.deselect()
     m.select(); _cmd(m, 0xEB, False); m.send(0x000100, 24, 4)
     for _ in range(_PLACEHOLDER.wait_quad_read):
@@ -268,8 +334,7 @@ def test_quad_write_then_quad_read():
 
 
 def test_qpi_mode_and_exit():
-    r = Psram(_PLACEHOLDER)
-    m = _Master(r)
+    r, m = _ram()
     m.select(); _cmd(m, 0x35, False); m.deselect()
     assert r.qpi
     m.select(); _cmd(m, 0x38, True); m.send(0x10, 24, 4); m.send(0x7E, 8, 4); m.deselect()
@@ -283,10 +348,35 @@ def test_qpi_mode_and_exit():
     assert not r.qpi and not r.errors, r.errors
 
 
-def test_cs_low_limit_is_flagged():
-    t = PsramTiming(**{**_PLACEHOLDER.__dict__, "t_cem_max_ns": 500})
-    r = Psram(t)
+def test_power_up_reset_is_required():
+    r = Psram(_PLACEHOLDER, strict=False)
     m = _Master(r)
+    m.select(); _cmd(m, 0x38, False); m.send(0, 24, 4); m.send(1, 8, 4); m.deselect()
+    assert any("before the power-up reset" in e for e in r.errors), r.errors
+    r2 = Psram(_PLACEHOLDER, strict=False)
+    m2 = _Master(r2)
+    m2.select(); _cmd(m2, 0x99, False); m2.deselect()           # 99h without 66h
+    assert any("without a preceding 66h" in e for e in r2.errors), r2.errors
+    r3, m3 = _ram()                                              # 66h then 99h: clean
+    assert r3.reset_done and not r3.errors
+
+
+def test_violations_raise_in_strict_mode():
+    t = PsramTiming(**{**_PLACEHOLDER.__dict__, "t_cem_max_ns": 2000})
+    r, m = _ram(t)
+    try:
+        m.select(); _cmd(m, 0xEB, False); m.send(0, 24, 4)
+        for _ in range(20):
+            m.clock()
+    except PsramViolation as e:
+        assert "tCEM" in str(e)
+    else:
+        raise AssertionError("tCEM violation did not raise")
+
+
+def test_cs_low_limit_is_flagged():
+    t = PsramTiming(**{**_PLACEHOLDER.__dict__, "t_cem_max_ns": 2000})
+    r, m = _ram(t, strict=False)
     m.select(); _cmd(m, 0xEB, False); m.send(0, 24, 4)
     for _ in range(20):
         m.clock()
@@ -294,20 +384,27 @@ def test_cs_low_limit_is_flagged():
     assert any("tCEM" in e for e in r.errors), r.errors
 
 
+def test_sck_pause_inside_burst_is_flagged():
+    r, m = _ram(strict=False)
+    m.select(); _cmd(m, 0xEB, False); m.send(0, 24, 4)
+    m.t += 1000                                                   # SCK stops for 1 us, /CE low
+    m.clock()
+    m.deselect()
+    assert any("SCK paused" in e for e in r.errors), r.errors
+
+
 def test_page_wrap_rule():
-    r = Psram(_PLACEHOLDER)
-    m = _Master(r)
+    r, m = _ram()
     m.select(); _cmd(m, 0x38, False); m.send(1023, 24, 4); m.send(0x1122, 16, 4); m.deselect()
     assert r.mem[1023] == 0x11 and r.mem[0] == 0x22 and 1024 not in r.mem
     t = PsramTiming(**{**_PLACEHOLDER.__dict__, "linear_burst_crosses_page": True})
-    r2 = Psram(t)
-    m2 = _Master(r2)
+    r2, m2 = _ram(t)
     m2.select(); _cmd(m2, 0x38, False); m2.send(1023, 24, 4); m2.send(0x1122, 16, 4); m2.deselect()
     assert r2.mem[1024] == 0x22
 
 
 def test_short_cs_high_and_partial_command():
-    r = Psram(_PLACEHOLDER)
+    r = Psram(_PLACEHOLDER, strict=False, powered_up_reset_done=True)
     r.pins(0, 0, 0, 0)
     r.pins(10, 1, 0, 0)
     r.pins(15, 0, 0, 0)                       # 5 ns high < tCPH
@@ -322,13 +419,10 @@ def test_exclusive_select():
 
 
 def test_datasheet_timing_set_and_second_page_crossing():
-    r = Psram(APS6404L_3SQR_SN)
-    m = _Master(r)
+    r, m = _ram(APS6404L_3SQR_SN)
     m.select(); _cmd(m, 0x38, False); m.send(1022, 24, 4); m.send(0x112233, 24, 4); m.deselect()
     assert r.mem[1024] == 0x33 and not r.errors, r.errors      # one crossing is allowed
-    r2 = Psram(APS6404L_3SQR_SN)
-    r2.t = PsramTiming(**{**APS6404L_3SQR_SN.__dict__, "t_cem_max_ns": 1e9})
-    m2 = _Master(r2)
+    r2, m2 = _ram(PsramTiming(**{**APS6404L_3SQR_SN.__dict__, "t_cem_max_ns": 1e9}), strict=False)
     m2.select(); _cmd(m2, 0x38, False); m2.send(1023, 24, 4)
     for b in range(1026):
         m2.send(b & 0xFF, 8, 4)

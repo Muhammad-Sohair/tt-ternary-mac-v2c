@@ -1,8 +1,8 @@
 ## How it works
 
-> **TMAC2C is in development (option C).** At this commit it is TMAC2 (`signoff-a`) with the top module
-> renamed to `tt_um_msohair_tmac2c`; the PSRAM activation store is not implemented yet. Everything below
-> describes TMAC2 and is valid for this commit.
+> **TMAC2C (in development) is TMAC2 plus an activation store in the QSPI Pmod's RAM A.** It is a strict
+> superset of TMAC2: every TMAC2 and v1 command and pin behaves exactly as in TMAC2 until one of the RAM
+> opcodes (0xA0–0xA3) is used, and if the RAM path does not work on silicon the chip is still a full TMAC2.
 
 
 TMAC2 is a 4 × 5 array of ternary (1.58-bit) processing elements that **fetches its own weights from external
@@ -47,6 +47,28 @@ pad and mux round trip on real silicon. Activations must arrive slower than chun
 this always holds. If an activation arrives while a compute is still waiting for weights, the sticky
 `OVERRUN` flag is set.
 
+### Activations in RAM (new in TMAC2C)
+
+The QSPI Pmod also carries two APS6404L-3SQR PSRAMs on the same SCK and IO0–IO3 lines as the flash
+(RAM A /CE = `uio[6]`, RAM B /CE = `uio[7]`; RAM B is never selected). The host writes an activation vector
+once with AWRITE; ARUN then runs n chunks exactly like LOAD_FC, except that the chip reads each chunk's
+5 activations from RAM A itself (two chunks, 10 bytes, per RAM visit). Only one device is selected at a
+time: before each RAM command the chip pauses the flash stream (/CS high, the loaded weight chunk is kept)
+and afterwards resumes it at the exact next byte, so ARUN, LOAD_FC and AWRITE can be mixed on one stream.
+
+- **AINIT first.** The RAM needs a reset (66h, 99h) after power-up; the chip refuses AWRITE/ARUN until
+  AINIT has run (ASTAT NOINIT).
+- **Clock range for the RAM path: SCK 6.25–25 MHz** (FCFG divider /8, /4 or /2 at the 50 MHz project clock;
+  25 MHz needs the sample delay chosen in the flash window test). The RAM limits /CE low to 8 µs
+  (APS6404L Table 10, tCEM), so the chip refuses RAM commands at /16 (ASTAT DIV). One RAM write (a 38h command
+  per byte, 16 SCK) takes about 70 clk at /4 and 140 clk at /8, against 128 clk for an SPI byte at the
+  fastest host rate (f_SCK = f_clk/16): at /8 send AWRITE data with SPI SCK at most f_clk/24, or use /4 or
+  /2; a byte that arrives too early is dropped and sets OVERRUN.
+- While a RAM operation runs (ASTAT BUSY), opcodes that would change the array, the flash stream or the
+  RAM are refused and set BLOCKED; reads, STATUS, SHIFT and FSTOP work. FSTOP and BIST end an ARUN after the
+  RAM command in flight.
+- RAM layout: activations as int8 bytes, K padded with zeros to a multiple of 5, chunk 0 first.
+
 ### SPI protocol
 
 Mode 0 (CPOL=0, CPHA=0), MSB first, one command per CS_n frame: an opcode byte, then data bytes. While the
@@ -73,8 +95,15 @@ before the first SCK edge, and high ≥ 8 clk between frames.
 | 0x91 | FSTART | in: two bytes, flash address bits 23:16 then 15:8; opens the stream and loads the first chunk |
 | 0x92 | FSTOP | close the stream (flash /CS high) |
 | 0x93 | FSTAT | out: fetch status, then config (`{0000, samp, div}`, reset 0x05) |
+| 0xA0 | AWRITE | in: RAM address bits 23:16, 15:8, 7:0, then data bytes; each byte is written to RAM A at the next address |
+| 0xA1 | ARUN | in: RAM address (3 bytes), chunk count n (2 bytes, MSB first); runs n LOAD_FC chunks with activations from RAM A; poll ASTAT until BUSY = 0 |
+| 0xA2 | AINIT | reset RAM A (66h, 99h); clears the RAM flags |
+| 0xA3 | ASTAT | out: RAM status `{BUSY, INIT, DIV, STREAM, OVERRUN, NOINIT, ABORT, BLOCKED}`; 0x00 after reset (TMAC2 returns STATUS, bit 7 = 1) |
 
-Other opcodes do nothing and return status. Status byte: `bit7 = 1, bit6 BIST_BUSY, bit5 BIST_DONE,
+Other opcodes do nothing and return status. ASTAT flags (sticky until AINIT or reset): DIV = refused at
+SCK /16; STREAM = ARUN with no flash chunk loaded; OVERRUN = an AWRITE byte arrived while the previous RAM
+write was still running (dropped); NOINIT = AWRITE/ARUN before AINIT; ABORT = ARUN ended by FSTOP/BIST;
+BLOCKED = an opcode was refused during a RAM operation. Status byte: `bit7 = 1, bit6 BIST_BUSY, bit5 BIST_DONE,
 bit4 BIST_PASS, bit3 ILLEGAL, bit2 ANY_SAT, bit1 RSAT (sticky: a READ_ACC returned a clamped value since the
 last CLEAR), bit0 = 1`. After reset it reads 0x81. Fetch status byte: `bit7 OPEN (flash /CS low), bit6 BUSY,
 bit5 READY, bit4 PEND (a compute is waiting for weights), bit3 OVERRUN, bits 2:0 = 010`; 0x02 after reset.
