@@ -1,5 +1,10 @@
 ## How it works
 
+> **TMAC2C is in development (option C).** At this commit it is TMAC2 (`signoff-a`) with the top module
+> renamed to `tt_um_msohair_tmac2c`; the PSRAM activation store is not implemented yet. Everything below
+> describes TMAC2 and is valid for this commit.
+
+
 TMAC2 is a 4 × 5 array of ternary (1.58-bit) processing elements that **fetches its own weights from external
 QSPI flash**. Each weight is −1, 0 or +1, so a "multiply" is an add, a subtract or nothing, and the array has
 no multipliers. It carries an FPGA accelerator (Zynq-7020, 512 PEs) onto SKY130, with the same weight format

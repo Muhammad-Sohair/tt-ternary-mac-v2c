@@ -27,8 +27,8 @@ module tb ();
   wire VGND = 1'b0;
 `endif
 
-  // Replace tt_um_msohair_tmac2 with your module name:
-  tt_um_msohair_tmac2 user_project (
+  // Replace tt_um_msohair_tmac2c with your module name:
+  tt_um_msohair_tmac2c user_project (
 
       // Include power ports for the Gate Level test:
 `ifdef GL_TEST

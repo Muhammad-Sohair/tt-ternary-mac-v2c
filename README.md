@@ -1,17 +1,15 @@
 ![](../../workflows/gds/badge.svg) ![](../../workflows/docs/badge.svg) ![](../../workflows/test/badge.svg)
 
-# TMAC2: a ternary (1.58-bit) MAC array that streams its weights from QSPI flash
+# TMAC2C: TMAC2 plus activations kept in the QSPI Pmod's PSRAM (option C, in development)
 
-Version 2 of [tt-ternary-mac](https://github.com/Muhammad-Sohair/tt-ternary-mac) for the Tiny Tapeout
-**SKY 26d** shuttle (SkyWater 130 nm). The v1 datapath is unchanged: a 4 × 5 array of multiplier-free
-ternary PEs with the FPGA's base-3 weight packing and `sat16(acc >>> shift)` requantisation
-([LLM-on-a-FPGA](https://github.com/Muhammad-Sohair/LLM-on-a-FPGA)). New in v2: a QSPI master that reads
-packed weights straight from the TT QSPI Pmod's W25Q128JV flash, so a whole weight matrix (all of
-TriLM-99M's ternary weights fit in the 16 MB flash) streams through the array while the host only sends
-activations. Every v1 command still works, so without the flash the chip behaves exactly like v1.
+TMAC2C is [TMAC2](https://github.com/Muhammad-Sohair/tt-ternary-mac-v2) (tag `signoff-a`, the TT SKY 26d
+submission) with one addition: activation vectors are written once into the PSRAM chips on the Tiny Tapeout
+QSPI Pmod and re-read by the chip for every row group, so the host no longer re-sends them over SPI. The
+4 × 5 array, the flash weight streamer and everything else are A's, unchanged. Top module
+`tt_um_msohair_tmac2c`, 2x2 tiles (estimate).
 
-**Status:** RTL verified (14/14 cocotb tests); hardening in progress. Sign-off rules and dates:
-[notes/v2_00](notes/v2_00_plan_and_rules.md). Not submitted. The datasheet is in [docs/info.md](docs/info.md).
+**Status:** seeded from `signoff-a` on 4 Nov 2026; RTL for the PSRAM path not written yet (gated on the
+datasheet check). Not signed off, not submitted. Plan, gates and rules: [notes/v2c_00](notes/v2c_00_plan_and_gates.md).
 
 ## v2 notes
 

@@ -1,6 +1,6 @@
 # Tiny Tapeout project information
 project:
-  title:        "TMAC2: ternary MAC array with QSPI weight streaming"      # Project title
+  title:        "TMAC2C: ternary MAC array, QSPI weights + PSRAM activations"      # Project title
   author:       "Muhammad Sohair Khan"      # Your name
   discord:      ""      # Your discord username, for communication and automatically assigning you a Tapeout role (optional)
   description:  "4x5 multiplier-free ternary MAC array, 24-bit acc, SPI; streams base-3 packed weights from the QSPI Pmod flash"      # One line description of what your project does
@@ -11,13 +11,13 @@ project:
   tiles: "2x2"          # Valid values: 1x1, 1x2, 2x2, 3x2, 4x2, 6x2 or 8x2
 
   # Your top module name must start with "tt_um_". Make it unique by including your github username:
-  top_module:  "tt_um_msohair_tmac2"
+  top_module:  "tt_um_msohair_tmac2c"
 
   # List your project's source files here.
   # Source files must be in ./src and you must list each source file separately, one per line.
   # Don't forget to also update `PROJECT_SOURCES` in test/Makefile.
   source_files:
-    - "tt_um_msohair_tmac2.v"
+    - "tt_um_msohair_tmac2c.v"
     - "tmac_core.v"
     - "tmac_bist.v"
     - "spi_slave.v"

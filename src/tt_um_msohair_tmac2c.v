@@ -10,7 +10,7 @@
 
 `default_nettype none
 
-module tt_um_msohair_tmac2 #(
+module tt_um_msohair_tmac2c #(
     parameter ROWS  = 4,
     parameter COLS  = 5,
     parameter ACC_W = 24              // internal; exact for K <= 65,535 (|acc| <= 128*K)

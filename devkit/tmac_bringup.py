@@ -26,7 +26,7 @@ import time
 
 import tmac_model as M
 
-PROJECT = "tt_um_msohair_tmac2"
+PROJECT = "tt_um_msohair_tmac2c"
 PROJECT_HZ = 1_000_000          # bring-up clock; raised in stages S8 and F4
 HALF_US = 20                    # >= 8 clocks at 1 MHz, with margin for Python jitter
 

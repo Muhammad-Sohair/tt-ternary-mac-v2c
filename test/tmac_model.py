@@ -190,7 +190,7 @@ def pack_stream(W):
 
 
 class TMAC2(TMAC):
-    """TMAC plus the flash weight stream (qspi_fetch.v, tt_um_msohair_tmac2.v)."""
+    """TMAC plus the flash weight stream (qspi_fetch.v, tt_um_msohair_tmac2c.v)."""
 
     def __init__(self, flash=None):
         self.flash = dict(flash or {})        # byte address -> value; anything else reads erased
@@ -245,7 +245,7 @@ class TMAC2(TMAC):
 def write_rtl_constants(sig):
     import pathlib
     import re
-    top = pathlib.Path(__file__).resolve().parent.parent / "src" / "tt_um_msohair_tmac2.v"
+    top = pathlib.Path(__file__).resolve().parent.parent / "src" / "tt_um_msohair_tmac2c.v"
     text = top.read_text()
     block = (
         "  // BEGIN GENERATED BIST CONSTANTS (test/tmac_model.py --write-rtl; do not edit)\n"
