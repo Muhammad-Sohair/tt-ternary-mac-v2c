@@ -13,7 +13,7 @@ PC does not re-send them over SPI. Nothing else changes from A.
 
 | gate | date | condition | status |
 |---|---|---|---|
-| 1 | 8 Nov 2026 | datasheet check done; every [PENDING DATASHEET] item in v2c_02 resolved; if the datasheets break the architecture, C stops | — |
+| 1 | 8 Nov 2026 | datasheet check done; every [PENDING DATASHEET] item in v2c_02 resolved; if the datasheets break the architecture, C stops | **datasheets done 4 Nov, architecture not broken; waiting on owner decisions R1 and m/tiles (v2c_02 §7)** |
 | 2 | 15 Nov 2026 | RTL + tests passing: golden model, bit-exact checks, RAM model with real datasheet timing, mutation tests with a no-mutation control | — |
 | 3 | 22 Nov 2026 | full A standard: 9-corner timing, DRC/LVS/antenna, gate-level sim, mutation tests, slew residuals no worse than A's, no clock-net violations; else C stops for this shuttle (v3 input) | — |
 
@@ -33,3 +33,4 @@ PC does not re-send them over SPI. Nothing else changes from A.
 |---|---|
 | 4 Nov | Seed created; B archive and A integrity checks passed (A `main` 2c24307 green, src/info.yaml/docs identical to `signoff-a`, no commits since 29 Oct). |
 | 4 Nov | Seed RTL 14/14 locally; seed CI queued. Track 2 setup: `test/psram_model.py` (pin-level RAM engine, every datasheet value a parameter, 6/6 self-tests with placeholder values), golden model `TMAC2C`/`matvec_c` (self-checked), hardening config = A + lrc2 `LAYERS_RC` + post-GRT margin 20, spec draft v2c_02. **Found: A's flash controller only opens at page boundaries, so interleaving RAM reads needs a byte-address resume in `qspi_fetch` ([DECISION] R1).** |
+| 4 Nov | Track 1 done: parts W25Q128JVSIM + 2 × APS6404L-3SQR-SN (schematic v2.2); tCEM 8 µs, tCPH 18 ns, EBh 6 wait cycles, 1 KB pages re-checked against the APS6404L Rev 2.7 PDF text. Shared bus confirmed (serialise). All [PENDING DATASHEET] items in v2c_02 resolved; RAM model has the cited timing set (7/7 self-tests). Limits: RAM bursts ≤ 89 bytes at 25 MHz, ≤ 39 at 12.5 MHz, unusable at clk/16; chip must reset the RAM after power-up. |

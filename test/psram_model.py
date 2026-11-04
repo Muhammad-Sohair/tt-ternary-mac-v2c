@@ -175,6 +175,11 @@ class Psram:
 
     def _advance(self):
         nxt = self.addr + 1
+        if nxt % self.t.page_bytes == 0 and self.t.linear_burst_crosses_page:
+            # APS6404L 9.2: a linear burst may cross a page boundary one time only
+            if (nxt - self.start_addr) > self.t.page_bytes or \
+               (self.start_addr // self.t.page_bytes) != (self.addr // self.t.page_bytes):
+                self.errors.append(f"{self.name}: burst from 0x{self.start_addr:x} crosses a second page boundary")
         if nxt % self.t.page_bytes == 0 and not self.t.linear_burst_crosses_page:
             nxt -= self.t.page_bytes          # wrap inside the page
         self.addr = nxt % self.t.size_bytes
@@ -184,6 +189,21 @@ class Psram:
             self.errors.append(f"{self.name}: /CS rose mid-{self.phase} after {self.bits} bits")
         if self.phase == "wdata" and self.wnib:
             self.errors.append(f"{self.name}: /CS rose mid-byte in a write")
+
+
+# APS6404L-3SQR-SN (U2/U3 on mole99/qspi-pmod schematic v2.2), AP Memory datasheet Rev 2.7, 5 Jan 2024.
+# Checked against the PDF text on 4 Nov 2026 (notes/v2c_01_datasheets.md).
+APS6404L_3SQR_SN = PsramTiming(
+    t_cem_max_ns=8000,         # Table 10, tCEM 8 us, standard grade (-SN: Tc -40..85 C, Table 1)
+    t_cph_min_ns=18,           # Table 10, tCPH
+    t_valid_ns=5.5 + 20,       # Table 10 tACLK max 5.5 ns + TT mux/pad round trip ~20 ns (tinytapeout.com/specs)
+    t_hold_ns=1.5,             # Table 10 tKOH min (pads only add delay, so this is the pessimistic hold)
+    wait_fast_read=8,          # 9.5 truth table: 0Bh SPI 8 wait cycles
+    wait_quad_read=6,          # EBh SPI mode: 6
+    wait_qpi_read=6,           # EBh QPI mode: 6
+    page_bytes=1024,           # 9.2: 1K page (CA[9:0])
+    linear_burst_crosses_page=True,  # 9.2: linear burst crosses a page boundary, once per burst
+)
 
 
 def check_exclusive_select(cs_flash, cs_a, cs_b):
@@ -299,3 +319,18 @@ def test_short_cs_high_and_partial_command():
 def test_exclusive_select():
     assert check_exclusive_select(0, 1, 1) and check_exclusive_select(1, 1, 1)
     assert not check_exclusive_select(0, 0, 1)
+
+
+def test_datasheet_timing_set_and_second_page_crossing():
+    r = Psram(APS6404L_3SQR_SN)
+    m = _Master(r)
+    m.select(); _cmd(m, 0x38, False); m.send(1022, 24, 4); m.send(0x112233, 24, 4); m.deselect()
+    assert r.mem[1024] == 0x33 and not r.errors, r.errors      # one crossing is allowed
+    r2 = Psram(APS6404L_3SQR_SN)
+    r2.t = PsramTiming(**{**APS6404L_3SQR_SN.__dict__, "t_cem_max_ns": 1e9})
+    m2 = _Master(r2)
+    m2.select(); _cmd(m2, 0x38, False); m2.send(1023, 24, 4)
+    for b in range(1026):
+        m2.send(b & 0xFF, 8, 4)
+    m2.deselect()
+    assert any("second page boundary" in e for e in r2.errors), r2.errors
