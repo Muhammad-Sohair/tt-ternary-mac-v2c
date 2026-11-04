@@ -17,6 +17,7 @@
  * caller refuses div = 3 (clk/16 cannot fit a useful burst in tCEM).
  * Read data are captured exactly as in qspi_fetch: from the free-running
  * input register, (samp + 1) clk after the clock that drops SCK.
+ * addr and wdata are not copied: the caller holds them stable while busy.
  *
  * io_oe is driven only while the chip sends (command, address, write data)
  * and is released on the SCK fall after the last address nibble of a read,
@@ -68,9 +69,6 @@ module psram_ctl (
   reg [3:0]  oe_q;
   reg [2:0]  hcnt;
   reg [4:0]  cnt;                          // clocks left in the current phase
-  reg [7:0]  cmd;
-  reg [23:0] a_q;
-  reg [7:0]  w_q;
   reg [4:0]  nib_out, nib_in;              // read nibbles still to launch / capture
   reg        hi_half;
   reg [3:0]  hi_nib, in_q;
@@ -84,8 +82,10 @@ module psram_ctl (
   wire       grab = evs[samp + 3'd1] && (nib_in != 5'd0);
 
   // what the chip drives: instruction bit on IO0, then address / write nibbles
-  wire [3:0] addr_nib = a_q[4*cnt - 1 -: 4];
-  wire [3:0] data_nib = cnt[0] ? w_q[3:0] : w_q[7:4];   // cnt 2 -> high, 1 -> low
+  wire [7:0] cmd = (kind == K_RST1) ? 8'h66 : (kind == K_RST2) ? 8'h99 :
+                   (kind == K_WRITE) ? 8'h38 : 8'hEB;
+  wire [3:0] addr_nib = addr[4*cnt - 1 -: 4];
+  wire [3:0] data_nib = cnt[0] ? wdata[3:0] : wdata[7:4];   // cnt 2 -> high, 1 -> low
   assign io_out = (state == S_CMD)  ? {3'b000, cmd[cnt - 1]} :
                   (state == S_ADDR) ? addr_nib :
                   (state == S_DATA && kind == K_WRITE) ? data_nib : 4'b0000;
@@ -99,10 +99,9 @@ module psram_ctl (
 
   always @(posedge clk) in_q <= io_in;
 
-  task start_cmd(input [1:0] k, input [7:0] c);
+  task start_cmd(input [1:0] k);
     begin
       kind  <= k;
-      cmd   <= c;
       state <= S_GAP;
       hcnt  <= half;
     end
@@ -121,7 +120,7 @@ module psram_ctl (
       nib_out<= 5'd0;
       rd_idx <= 4'd0;
       hi_half<= 1'b1;
-      if (rst) begin kind <= K_RST1; cmd <= 8'd0; a_q <= 24'd0; w_q <= 8'd0; cnt <= 5'd0; hi_nib <= 4'd0; end
+      if (rst) begin kind <= K_RST1; cnt <= 5'd0; hi_nib <= 4'd0; end
     end else begin
       if (hcnt != 3'd0) hcnt <= hcnt - 3'd1;
 
@@ -136,12 +135,10 @@ module psram_ctl (
         S_IDLE: begin
           rd_idx  <= 4'd0;
           hi_half <= 1'b1;
-          a_q     <= addr;
-          w_q     <= wdata;
-          if (do_reset)      start_cmd(K_RST1, 8'h66);
-          else if (do_write) start_cmd(K_WRITE, 8'h38);
+          if (do_reset)      start_cmd(K_RST1);
+          else if (do_write) start_cmd(K_WRITE);
           else if (do_read) begin
-            start_cmd(K_READ, 8'hEB);
+            start_cmd(K_READ);
             nib_out <= {nbytes, 1'b0};
             nib_in  <= {nbytes, 1'b0};
           end
@@ -228,7 +225,7 @@ module psram_ctl (
           csn_q <= 1'b1;
           if (cnt != 5'd0) cnt <= cnt - 5'd1;
           else if (tick) begin             // >= one SCK phase + cnt clk with /CE high
-            if (kind == K_RST1) start_cmd(K_RST2, 8'h99);
+            if (kind == K_RST1) start_cmd(K_RST2);
             else state <= S_IDLE;
           end
         end

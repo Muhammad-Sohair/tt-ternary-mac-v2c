@@ -226,6 +226,15 @@ async def matvec_c_on_chip(dut, m, bus, W, x, page, base, tag):
         ys += m.acc
     for i, row in enumerate(W):
         assert ys[i] == sum(w * v for w, v in zip(row, x)), f"{tag}: model row {i}"
+    # After ARUN the array's activation registers must hold exactly the last chunk (as after LOAD_FC):
+    # with all-+1 weights loaded over SPI, a CMP adds sum(a) to every row; it must match the model.
+    ones = [0xF2] * 4
+    await xfer(dut, [OP_LOAD_W] + ones)
+    for i, b in enumerate(ones):
+        m.write_wbyte(i, b)
+    await xfer(dut, [0x30])
+    m.compute(clear=False)
+    await check_c(dut, m, f"{tag} CMP after ARUN")
     bus.check(tag)
     return ys
 

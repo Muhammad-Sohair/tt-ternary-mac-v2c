@@ -103,12 +103,19 @@ module tt_um_msohair_tmac2c #(
   reg  [4:0]      shift;     // readout requantisation shift, as in the FPGA OPMODE
   reg             s_fc_last, s_fstart, s_fstop;
   reg  [1:0]      f_div, f_samp;
-  reg  [15:0]     f_page;    // flash address[23:8]: streams start on 256-byte boundaries
   // TMAC2C RAM path
   reg             s_ainit, s_awr, s_arun, a_blocked;
-  reg  [23:0]     a_wptr, a_waddr, ar_base;
-  reg  [15:0]     ar_n;
+  // One 24-bit argument register for all three address commands: FSTART loads
+  // the flash page into [23:8] (read by qspi_fetch only at start); AWRITE and
+  // ARUN load the RAM address. It is the RAM address of the current AWRITE
+  // byte / the current ARUN visit, held stable while the RAM command runs
+  // (it can only move mid-command in the OVERRUN error case).
+  reg  [23:0]     m_ptr;
+  wire            x_adv;     // the RAM path moves to the next ARUN visit (+10)
+  wire [23:0]     m_next = m_ptr + (x_adv ? 24'd10 : 24'd1);   // one adder for both
+  reg  [15:0]     ar_n;      // ARUN chunks still to compute (counted down by the RAM path)
   wire            x_busy;    // a RAM operation is in progress
+  wire            x_dec;     // the RAM path computed one ARUN chunk
 
   wire bist_busy;
   // While a RAM operation runs, opcodes that would change the array, the
@@ -119,13 +126,15 @@ module tt_um_msohair_tmac2c #(
                                rx_byte == OP_LOAD_FC || rx_byte == OP_CMP || rx_byte == OP_CMP_CLR ||
                                rx_byte == OP_BIST || rx_byte == OP_CLEAR || rx_byte == OP_FCFG ||
                                rx_byte == OP_FSTART || rx_byte == OP_ARUN || rx_byte == OP_AINIT ||
-                               (rx_byte == OP_AWRITE && op != OP_AWRITE));
+                               rx_byte == OP_AWRITE);
 
   always @(posedge clk) begin
     s_w_we <= 1'b0; s_a_we <= 1'b0; s_clr <= 1'b0; s_ac_cmp <= 1'b0;
     s_acc_rst <= 1'b0; bist_go <= 1'b0;
     s_fc_last <= 1'b0; s_fstart <= 1'b0; s_fstop <= 1'b0;
     s_ainit <= 1'b0; s_awr <= 1'b0; s_arun <= 1'b0; a_blocked <= 1'b0;
+    if (x_dec) ar_n <= ar_n - 16'd1;       // no ARUN argument byte can arrive while ARUN runs
+    if (x_adv) m_ptr <= m_next;            // +10; no AWRITE/FSTART byte can arrive either (blocked)
     // LOAD_AC: compute in the cycle after the last activation of a vector is
     // written. Registered alongside the write, so it does not depend on CS_n.
     s_cmp <= s_ac_cmp;
@@ -139,8 +148,8 @@ module tt_um_msohair_tmac2c #(
         s_w_addr <= 0; s_a_addr <= 0; s_data <= 8'd0; s_cmp <= 1'b0; shift <= 5'd0;
         // /4 (12.5 MHz SCK), sampled 2 clk (40 ns) after the falling edge:
         // safe for a ~26 ns pad/mux round trip (notes/v2_02_flash_timing.md)
-        f_div <= 2'd1; f_samp <= 2'd1; f_page <= 16'd0;
-        a_wptr <= 24'd0; a_waddr <= 24'd0; ar_base <= 24'd0; ar_n <= 16'd0;
+        f_div <= 2'd1; f_samp <= 2'd1;
+        m_ptr <= 24'd0; ar_n <= 16'd0;
       end
     end else if (rx_valid && !have_op && op_blocked) begin
       have_op   <= 1'b1;
@@ -181,25 +190,19 @@ module tt_um_msohair_tmac2c #(
         end
         OP_FCFG: if (idx == 8'd0) begin f_div <= rx_byte[1:0]; f_samp <= rx_byte[3:2]; end
         OP_FSTART: begin
-          if (idx == 8'd0) f_page[15:8] <= rx_byte;
-          if (idx == 8'd1) begin f_page[7:0] <= rx_byte; s_fstart <= ~bist_busy; end
+          if (idx == 8'd0) m_ptr[23:16] <= rx_byte;
+          if (idx == 8'd1) begin m_ptr[15:8] <= rx_byte; s_fstart <= ~bist_busy; end
         end
-        OP_AWRITE: begin
-          if (idx == 8'd0) a_wptr[23:16] <= rx_byte;
-          if (idx == 8'd1) a_wptr[15:8]  <= rx_byte;
-          if (idx == 8'd2) a_wptr[7:0]   <= rx_byte;
-          if (idx >= 8'd3) begin                // byte in s_data, address a_waddr
-            s_awr   <= ~bist_busy;
-            a_waddr <= a_wptr;
-            a_wptr  <= a_wptr + 24'd1;          // advances even if the byte is refused
+        OP_AWRITE, OP_ARUN: begin
+          if (idx == 8'd0) m_ptr[23:16] <= rx_byte;
+          if (idx == 8'd1) m_ptr[15:8]  <= rx_byte;
+          if (idx == 8'd2) m_ptr[7:0]   <= rx_byte;
+          if (op == OP_AWRITE && idx >= 8'd3) begin  // byte in s_data, its address in m_ptr
+            s_awr <= ~bist_busy;
+            if (idx != 8'd3) m_ptr <= m_next;       // +1; advances even if the byte is refused
           end
-        end
-        OP_ARUN: begin
-          if (idx == 8'd0) ar_base[23:16] <= rx_byte;
-          if (idx == 8'd1) ar_base[15:8]  <= rx_byte;
-          if (idx == 8'd2) ar_base[7:0]   <= rx_byte;
-          if (idx == 8'd3) ar_n[15:8]     <= rx_byte;
-          if (idx == 8'd4) begin ar_n[7:0] <= rx_byte; s_arun <= ~bist_busy; end
+          if (op == OP_ARUN && idx == 8'd3) ar_n[15:8] <= rx_byte;
+          if (op == OP_ARUN && idx == 8'd4) begin ar_n[7:0] <= rx_byte; s_arun <= ~bist_busy; end
         end
         default: ;
       endcase
@@ -248,12 +251,12 @@ module tt_um_msohair_tmac2c #(
 
   wire fc_fire  = fc_pend && f_ready && !bist_busy;
   wire f_stop   = s_fstop | bist_go | bist_pin_go;
-  wire x_fire, x_pause;                    // RAM-path compute+next, flash pause
+  wire x_next, x_pause;                    // RAM path: flash next/resume, flash pause
 
   qspi_fetch #(.CHUNK(NBYTES)) u_fetch (
       .clk(clk), .rst(rst),
-      .start(s_fstart), .next(fc_fire | x_fire), .stop(f_stop), .pause(x_pause),
-      .page(f_page), .div(f_div), .samp(f_samp),
+      .start(s_fstart), .next(fc_fire | x_next), .stop(f_stop), .pause(x_pause),
+      .page(m_ptr[23:8]), .div(f_div), .samp(f_samp),
       .we(f_we), .waddr(f_waddr), .wbyte(f_wbyte),
       .busy(f_busy), .ready(f_ready), .open_(f_open),
       .sck(f_sck), .csn(f_csn), .io0_out(f_io0), .io0_oe(f_io0_oe),
@@ -274,25 +277,28 @@ module tt_um_msohair_tmac2c #(
   // ---------------- RAM A activation path (TMAC2C) ----------------
   // One arbiter owns the shared Pmod bus for RAM operations: it waits until
   // no flash fetch is in flight, pauses an open flash stream (/CS high, the
-  // held chunk stays in the array), runs the RAM command, and leaves the
-  // flash paused; the next flash request (LOAD_FC or ARUN) resumes it at
-  // the next byte. ARUN, per visit of up to 2 chunks (m = 2): one RAM burst
-  // of 10 bytes, then for each chunk load 5 activations, compute when its
-  // weights are in, and request the next chunk exactly as LOAD_FC does.
+  // held weight chunk stays in the array), runs the RAM command, and leaves
+  // the flash paused; the next flash request (LOAD_FC or ARUN) resumes it at
+  // the next byte.
+  //
+  // ARUN, one RAM visit per two chunks (m = 2), with no activation buffer:
+  // the visit starts with chunk c's weights already in the array. The RAM
+  // burst's bytes go straight into the array's activation registers; after
+  // byte 4 chunk c is computed (W and a are sampled in that cycle), and bytes
+  // 5..9 then overwrite the registers with chunk c+1's activations. After the
+  // burst the flash resumes and fetches chunk c+1; it is computed as soon as
+  // it is in, together with the request for chunk c+2, exactly as LOAD_FC.
   localparam [3:0] X_IDLE = 4'd0, X_ACQ = 4'd1, X_GO = 4'd2, X_WAITR = 4'd3,
-                   X_RCHK = 4'd4, X_RGO = 4'd5, X_RWAIT = 4'd6, X_LOAD = 4'd7,
-                   X_FIRE = 4'd8;
+                   X_RCHK = 4'd4, X_RGO = 4'd5, X_BURST = 4'd6, X_NEXT = 4'd7,
+                   X_WAITW = 4'd8, X_FIRE = 4'd9;
   localparam [1:0] XK_INIT = 2'd0, XK_WRITE = 2'd1;
 
   reg  [3:0]  x_state;
   reg  [1:0]  x_kind;
   reg         x_init, x_err_div, x_err_stream, x_overrun, x_noinit, x_abort, x_blocked;
-  reg  [23:0] x_addr;
   reg  [7:0]  x_wdata;
-  reg  [15:0] x_left;
-  reg         x_two, x_j;                  // visit holds two chunks; chunk index in visit
-  reg  [2:0]  x_k;                         // activation index 0..COLS-1
-  reg  [7:0]  abuf [0:9];
+  reg         x_two;                       // this visit holds two chunks
+  reg         x_cmp1;                      // compute the visit's first chunk (cycle after byte 4)
 
   wire        r_busy, r_rd_we, r_sck, r_csn;
   wire [3:0]  r_rd_idx, r_io_out, r_io_oe;
@@ -302,10 +308,13 @@ module tt_um_msohair_tmac2c #(
   // RAM with a partial command), then the run stops. ASTAT shows busy until then.
   wire        x_abort_now = (x_state != X_IDLE) && (s_fstop | bist_go | bist_pin_go);
   wire        x_div_bad = (f_div == 2'd3);           // clk/16: no useful burst fits in tCEM
+  wire        x_fire = (x_state == X_FIRE) && f_ready && !f_busy && !bist_busy;
 
   assign x_busy  = (x_state != X_IDLE) || r_busy;
   assign x_pause = (x_state == X_ACQ || x_state == X_RCHK) && !f_busy && f_open;
-  assign x_fire  = (x_state == X_FIRE) && f_ready && !f_busy && !bist_busy;
+  assign x_next  = (x_state == X_NEXT) | x_fire;
+  assign x_dec   = x_cmp1 | x_fire;
+  assign x_adv   = x_fire && (ar_n != 16'd1);
 
   psram_ctl u_ram (
       .clk(clk), .rst(rst), .abort(1'b0),
@@ -313,23 +322,20 @@ module tt_um_msohair_tmac2c #(
       .do_reset(x_state == X_GO && x_kind == XK_INIT),
       .do_write(x_state == X_GO && x_kind == XK_WRITE),
       .do_read (x_state == X_RGO),
-      .addr(x_addr), .wdata(x_wdata), .nbytes(x_two ? 4'd10 : 4'd5),
+      .addr(m_ptr), .wdata(x_wdata), .nbytes(x_two ? 4'd10 : 4'd5),
       .busy(r_busy), .rd_we(r_rd_we), .rd_idx(r_rd_idx), .rd_byte(r_rd_byte),
       .sck(r_sck), .csn(r_csn), .io_out(r_io_out), .io_oe(r_io_oe),
       .io_in({uio_in[5], uio_in[4], uio_in[2], uio_in[1]})
   );
 
   always @(posedge clk) begin
-    if (r_rd_we) abuf[r_rd_idx] <= r_rd_byte;
-  end
-
-  always @(posedge clk) begin
     if (rst) begin
       x_state <= X_IDLE; x_kind <= XK_INIT;
       x_init <= 1'b0; x_err_div <= 1'b0; x_err_stream <= 1'b0; x_overrun <= 1'b0;
       x_noinit <= 1'b0; x_abort <= 1'b0; x_blocked <= 1'b0;
-      x_addr <= 24'd0; x_wdata <= 8'd0; x_left <= 16'd0; x_two <= 1'b0; x_j <= 1'b0; x_k <= 3'd0;
+      x_wdata <= 8'd0; x_two <= 1'b0; x_cmp1 <= 1'b0;
     end else begin
+      x_cmp1 <= (x_state == X_BURST) && r_rd_we && (r_rd_idx == 4'd4) && !x_abort_now;
       if (a_blocked) x_blocked <= 1'b1;
       if (x_abort_now) begin
         x_state <= X_IDLE;
@@ -345,11 +351,11 @@ module tt_um_msohair_tmac2c #(
           end else if (s_awr) begin
             if (!x_init) x_noinit <= 1'b1;
             else if (x_div_bad) x_err_div <= 1'b1;
-            else begin x_kind <= XK_WRITE; x_addr <= a_waddr; x_wdata <= s_data; x_state <= X_ACQ; end
+            else begin x_kind <= XK_WRITE; x_wdata <= s_data; x_state <= X_ACQ; end
           end else if (s_arun && ar_n != 16'd0) begin
             if (!x_init) x_noinit <= 1'b1;
             else if (x_div_bad) x_err_div <= 1'b1;
-            else begin x_addr <= ar_base; x_left <= ar_n; x_state <= X_RCHK; end
+            else x_state <= X_RCHK;
           end
         end
         X_ACQ: if (!f_busy && !f_open) x_state <= X_GO;
@@ -360,30 +366,25 @@ module tt_um_msohair_tmac2c #(
         end
         X_RCHK: if (!f_busy) begin
           if (!f_ready) begin x_err_stream <= 1'b1; x_state <= X_IDLE; end
-          else if (!f_open) begin x_two <= (x_left != 16'd1); x_state <= X_RGO; end
+          else if (!f_open) begin x_two <= (ar_n != 16'd1); x_state <= X_RGO; end
         end
-        X_RGO:   x_state <= X_RWAIT;
-        X_RWAIT: if (!r_busy) begin x_state <= X_LOAD; x_j <= 1'b0; x_k <= 3'd0; end
-        X_LOAD: begin
-          x_k <= x_k + 3'd1;
-          if (x_k == COLS - 1) x_state <= X_FIRE;
-        end
-        X_FIRE: if (x_fire) begin
-          x_left <= x_left - 16'd1;
-          x_k    <= 3'd0;
-          if (x_left == 16'd1) x_state <= X_IDLE;             // done; the prefetch runs on, as after LOAD_FC
-          else if (x_two && !x_j) begin x_j <= 1'b1; x_state <= X_LOAD; end
-          else begin x_addr <= x_addr + 24'd10; x_state <= X_RCHK; end
+        X_RGO:   x_state <= X_BURST;
+        X_BURST: if (!r_busy) x_state <= X_NEXT;
+        X_NEXT:  x_state <= x_two ? X_WAITW : X_IDLE;   // resume the flash: chunk c+1 (or the prefetch)
+        X_WAITW: x_state <= X_FIRE;
+        X_FIRE:  if (x_fire) begin
+          if (ar_n == 16'd1) x_state <= X_IDLE;     // done; the prefetch runs on, as after LOAD_FC
+          else x_state <= X_RCHK;           // m_ptr += 10 (x_adv)
         end
         default: x_state <= X_IDLE;
       endcase
-      if (s_awr && x_busy) x_overrun <= 1'b1;                 // byte arrived while the RAM was busy: dropped
+      if (s_awr && x_busy) x_overrun <= 1'b1;   // byte arrived while the RAM was busy: dropped
     end
   end
 
-  wire       x_a_we   = (x_state == X_LOAD);
-  wire [3:0] x_a_idx  = {1'b0, x_j, 2'b00} + {3'b000, x_j} + {1'b0, x_k};   // x_j * 5 + x_k
-  wire [7:0] x_a_byte = abuf[x_a_idx];
+  // activations from the RAM burst go straight into the array: byte i -> a[i mod 5]
+  wire           x_a_we   = (x_state == X_BURST) && r_rd_we;
+  wire [3:0]     x_a_idx  = (r_rd_idx >= 4'd5) ? r_rd_idx - 4'd5 : r_rd_idx;
 
   wire c_w_we = bist_busy ? b_w_we : (f_we | s_w_we);
 
@@ -393,9 +394,9 @@ module tt_um_msohair_tmac2c #(
       .w_addr (bist_busy ? b_w_addr : f_we ? f_waddr : s_w_addr),
       .w_byte (bist_busy ? b_data   : f_we ? f_wbyte : s_data),
       .a_we   (bist_busy ? b_a_we   : (s_a_we | x_a_we)),
-      .a_addr (bist_busy ? b_a_addr : x_a_we ? x_k[AA_W-1:0] : s_a_addr),
-      .a_byte (bist_busy ? b_data   : x_a_we ? x_a_byte : s_data),
-      .compute(bist_busy ? b_cmp    : (s_cmp | fc_fire | x_fire)),
+      .a_addr (bist_busy ? b_a_addr : x_a_we ? x_a_idx[AA_W-1:0] : s_a_addr),
+      .a_byte (bist_busy ? b_data   : x_a_we ? r_rd_byte : s_data),
+      .compute(bist_busy ? b_cmp    : (s_cmp | fc_fire | x_cmp1 | x_fire)),
       .clear  (bist_busy ? b_clr    : s_clr),
       .acc_rst(s_acc_rst | bist_go | bist_pin_go),
       .acc_flat(acc_flat), .sat_flags(sat_flags),
