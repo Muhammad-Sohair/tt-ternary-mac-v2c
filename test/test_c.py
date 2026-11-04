@@ -13,11 +13,11 @@ Run: mingw32-make COCOTB_TEST_MODULES=test_c   (RTL)   or with GATES=yes (gate l
 import random
 
 import cocotb
-from cocotb.triggers import ClockCycles, Timer
+from cocotb.triggers import ClockCycles, RisingEdge, Timer
 from cocotb.utils import get_sim_time
 
 from psram_model import APS6404L_3SQR_SN, Psram, PsramTiming
-from test import (OP_CLEAR, OP_FCFG, OP_FSTART, OP_FSTOP, OP_LOAD_FC, OP_LOAD_W,
+from test import (GL, OP_CLEAR, OP_FCFG, OP_FSTART, OP_FSTOP, OP_LOAD_FC, OP_LOAD_W,
                   check_all, check_flash, fstat, image_at, rand_matrix, start, wait_ready, xfer)
 from tmac_model import (COLS, FLASH_ERASED, OP_AINIT, OP_ARUN, OP_ASTAT, OP_AWRITE, TMAC2C,
                         pack_acts, pack_stream)
@@ -451,3 +451,51 @@ async def test_c_dead_ram_chip_still_behaves_like_a(dut):
     await check_all(dut, m2, "A flow after dead RAM")
     assert m2.acc == [sum(w * v for w, v in zip(row, x)) for row in W]
     bus.check("dead ram")
+
+
+@cocotb.test()
+async def test_c_arbiter_waits_for_flash_cs_high(dut):
+    """The arbiter must not start a RAM command until the flash /CS is high. Closest legal schedule:
+    AWRITE pauses the flash, the 5th LOAD_FC byte computes and resumes it (a ~390-clk 6Bh re-open at
+    clk/8), and AINIT arrives during that re-open: the arbiter must wait for the fetch to finish and
+    the pause to take effect. In RTL runs a monitor also checks, on every clock, the invariant that
+    makes mutant #19 (dropping the /CS-high wait) unobservable: in X_ACQ the flash is never held
+    open with a `next` in the same cycle (proof in notes/v2c_05)."""
+    await start(dut)
+    bus = PmodBus(dut, {})
+    m = TMAC2C()
+    seen = {"busy_wait": False}
+
+    async def watch():                                            # RTL only
+        while True:
+            await RisingEdge(dut.clk)
+            try:
+                up = dut.user_project
+                acq = int(up.x_state.value) == 1
+                f_busy, f_open = int(up.f_busy.value), int(up.f_open.value)
+                nxt = int(up.fc_fire.value) | int(up.x_next.value)
+            except Exception:
+                return
+            if acq and f_busy:
+                seen["busy_wait"] = True
+            assert not (acq and not f_busy and f_open and nxt), "X_ACQ with the flash held and next asserted"
+    if not GL:
+        cocotb.start_soon(watch())
+    W = [[1, -1, 0, 1, 1], [0, 0, 1, 1, -1], [-1, -1, -1, 0, 1], [1, 1, 1, 1, 1]]
+    stream, _, _ = pack_stream(W + W)
+    bus.image.update(image_at(0x0600, stream)); m.flash.update(image_at(0x0600, stream))
+    await xfer(dut, [OP_FCFG, (1 << 2) | 2]); m.f_div = 2           # clk/8: a re-open lasts ~390 clk
+    await ainit(dut, m)
+    await xfer(dut, [OP_FSTART, 0x06, 0x00]); m.fstart(0x0600); await wait_ready(dut)
+    await awrite(dut, m, 0x10, [9])                                  # pauses the flash
+    x = [3, -2, 7, 1, -5]
+    await xfer(dut, [OP_CLEAR]); m.clear()
+    await xfer(dut, [OP_LOAD_FC] + [v & 0xFF for v in x]); m.load_fc([v & 0xFF for v in x])
+    await xfer(dut, [OP_AINIT]); m.ainit()                           # during the re-open
+    await wait_ram_idle(dut)
+    await wait_ready(dut)
+    await check_c(dut, m, "AINIT during a flash re-open")
+    assert m.acc == [sum(w * v for w, v in zip(row, x)) for row in W]
+    if not GL:
+        assert seen["busy_wait"], "AINIT did not arrive while the flash was busy: schedule not exercised"
+    bus.check("arbiter waits for flash /CS")

@@ -79,6 +79,8 @@ M = [
 
 env = dict(os.environ, PWD=str(ROOT / "test").replace("\\", "/"))
 RUNS = [("test_c", []), ("test", ["COCOTB_TEST_FILTER=test_flash_"])]
+if os.environ.get("MUT_ONLY_C"):
+    RUNS = [("test_c", [])]
 only = sys.argv[1:]
 for i, (name, f, old, new) in enumerate(M):
     if only and str(i) not in only:
