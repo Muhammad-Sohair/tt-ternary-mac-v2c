@@ -103,5 +103,6 @@
         "cap": 0.0001903
       }
     }
-  }
+  },
+  "CTS_DISTANCE_BETWEEN_BUFFERS": 70
 }
