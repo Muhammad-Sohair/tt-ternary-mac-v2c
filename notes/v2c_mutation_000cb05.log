@@ -1,0 +1,62 @@
+[ 0] SURVIVED: CONTROL (no mutation)
+[ 1] CAUGHT: A: instruction 6Bh -> 6Ch
+      test_c ['test_c.test_c_arun_matvec_all_dividers', 'test_c.test_c_resume_at_arbitrary_byte', 'test_c.test_c_errors_and_blocking']: AssertionError: flash: unexpected instruction 0x6c
+      test ['test.test_flash_matvec', 'test.test_flash_timing_windows', 'test.test_flash_stop_restart_bist']: AssertionError: div 1 8x10: flash protocol: ['unexpected instruction 0x6c']
+[ 2] CAUGHT: A: nibble order swapped
+      test_c ['test_c.test_c_arun_matvec_all_dividers', 'test_c.test_c_resume_at_arbitrary_byte', 'test_c.test_c_slowest_ram_clock_meets_tcem']: AssertionError: div 0 group 0: raw acc [-73, -201, 308, -214] != model [33, -174, 29, -41]
+      test ['test.test_flash_matvec', 'test.test_flash_timing_windows', 'test.test_flash_stop_restart_bist']: AssertionError: div 1 8x10 group 0: raw acc [-43, -198, 76, -51] != model [-95, -123, 20, -260]
+[ 3] CAUGHT: A: 7 dummy clocks instead of 8
+      test_c ['test_c.test_c_arun_matvec_all_dividers', 'test_c.test_c_resume_at_arbitrary_byte', 'test_c.test_c_slowest_ram_clock_meets_tcem']: AssertionError: div 0 group 0: raw acc [-81, -193, 0, 76] != model [33, -174, 29, -41]
+      test ['test.test_flash_matvec', 'test.test_flash_timing_windows', 'test.test_flash_stop_restart_bist']: AssertionError: div 1 8x10 group 0: raw acc [-200, -362, -201, -94] != model [-95, -123, 20, -260]
+[ 4] CAUGHT: A: sample point one clk early
+      test_c ['test_c.test_c_arun_matvec_all_dividers', 'test_c.test_c_resume_at_arbitrary_byte', 'test_c.test_c_slowest_ram_clock_meets_tcem']: AssertionError: div 0 group 0: raw acc [-341, 87, 0, 0] != model [33, -174, 29, -41]
+      test ['test.test_flash_matvec', 'test.test_flash_timing_windows', 'test.test_flash_stop_restart_bist']: AssertionError: div 1 8x10 group 0: raw acc [-212, 304, 115, 61] != model [-95, -123, 20, -260]
+[ 5] CAUGHT: A: compute does not wait for weights
+      test ['test.test_flash_wait_and_overrun']: AssertionError: after one vector: FSTAT 0x02
+[ 6] CAUGHT: A: OVERRUN never set
+      test ['test.test_flash_wait_and_overrun']: AssertionError: after an extra activation: FSTAT 0x12
+[ 7] CAUGHT: A: IO0 not released for the dummy clocks
+      test_c ['test_c.test_c_arun_matvec_all_dividers', 'test_c.test_c_resume_at_arbitrary_byte', 'test_c.test_c_errors_and_blocking']: AssertionError: flash: IO0 still driven during data out
+      test ['test.test_flash_matvec', 'test.test_flash_timing_windows', 'test.test_flash_stop_restart_bist']: AssertionError: div 1 8x10: flash protocol: ['IO0 still driven by the chip during data out', 'IO0 still driven by the chip during data out', 'IO0 still driven b
+[ 8] CAUGHT: A: RAM B /CS driven low
+      test_c ['test_c.test_c_reset_state', 'test_c.test_c_ainit_power_up_reset', 'test_c.test_c_awrite_storage']: AssertionError: assert (((65 >> 6) & 1) and ((65 >> 7) & 1))
+      test ['test.test_flash_pins_reset', 'test.test_flash_matvec', 'test.test_flash_timing_windows']: AssertionError: uio_out 0x41
+[ 9] CAUGHT: A: write address steps on every nibble
+      test_c ['test_c.test_c_arun_matvec_all_dividers', 'test_c.test_c_resume_at_arbitrary_byte', 'test_c.test_c_slowest_ram_clock_meets_tcem']: AssertionError: div 0 group 0: raw acc [0, 29, 0, -41] != model [33, -174, 29, -41]
+      test ['test.test_flash_matvec', 'test.test_flash_timing_windows', 'test.test_flash_stop_restart_bist']: AssertionError: div 1 8x10 group 0: raw acc [0, 20, 0, -260] != model [-95, -123, 20, -260]
+[10] CAUGHT: A: next chunk one nibble short
+      test_c ['test_c.test_c_resume_at_arbitrary_byte', 'test_c.test_c_slowest_ram_clock_meets_tcem', 'test_c.test_c_dead_ram_chip_still_behaves_like_a']: AssertionError: RAM operation never finished
+      test ['test.test_flash_matvec', 'test.test_flash_stop_restart_bist']: AssertionError: FLASH_READY never rose
+[11] CAUGHT: C: resume at the page start, not the byte
+      test_c ['test_c.test_c_arun_matvec_all_dividers', 'test_c.test_c_resume_at_arbitrary_byte', 'test_c.test_c_slowest_ram_clock_meets_tcem']: AssertionError: div 0 group 0: status 0x81 != 0x89
+[12] CAUGHT: C: byte pointer never advances
+      test_c ['test_c.test_c_arun_matvec_all_dividers', 'test_c.test_c_resume_at_arbitrary_byte', 'test_c.test_c_slowest_ram_clock_meets_tcem']: AssertionError: div 0 group 0: status 0x81 != 0x89
+[13] CAUGHT: C: pause ignored (flash stays selected)
+      test_c ['test_c.test_c_arun_matvec_all_dividers', 'test_c.test_c_resume_at_arbitrary_byte', 'test_c.test_c_slowest_ram_clock_meets_tcem']: AssertionError: RAM operation never finished
+[14] CAUGHT: C: RAM read with 5 wait clocks
+      test_c ['test_c.test_c_arun_matvec_all_dividers', 'test_c.test_c_resume_at_arbitrary_byte', 'test_c.test_c_slowest_ram_clock_meets_tcem']: AssertionError: div 0 group 0: raw acc [-208, -155, 65, 29] != model [33, -174, 29, -41]
+[15] CAUGHT: C: RAM read nibbles swapped
+      test_c ['test_c.test_c_arun_matvec_all_dividers', 'test_c.test_c_resume_at_arbitrary_byte', 'test_c.test_c_slowest_ram_clock_meets_tcem']: AssertionError: div 0 group 0: raw acc [-224, 21, -31, 125] != model [33, -174, 29, -41]
+[16] CAUGHT: C: RAM write nibbles swapped
+      test_c ['test_c.test_c_awrite_storage', 'test_c.test_c_arun_matvec_all_dividers', 'test_c.test_c_resume_at_arbitrary_byte']: AssertionError: RAM[0x000000]
+[17] CAUGHT: C: reset sends 99h without 66h
+      test_c ['test_c.test_c_ainit_power_up_reset', 'test_c.test_c_awrite_storage', 'test_c.test_c_arun_matvec_all_dividers']: PsramViolation: RAM A: 99h without a preceding 66h
+[18] CAUGHT: C: address on IO0 only (IO1..3 not enabled)
+      test_c ['test_c.test_c_awrite_storage', 'test_c.test_c_arun_matvec_all_dividers', 'test_c.test_c_resume_at_arbitrary_byte']: AssertionError: RAM[0x000000]
+[19] SURVIVED: C: RAM used without pausing the flash
+[20] CAUGHT: C: second chunk's activations land in the wrong columns
+      test_c ['test_c.test_c_resume_at_arbitrary_byte', 'test_c.test_c_slowest_ram_clock_meets_tcem']: AssertionError: long group 0: raw acc [-470, 699, 99, -82] != model [447, 664, 866, 760]
+[21] CAUGHT: C: first chunk computed one byte early (before a[4] is written)
+      test_c ['test_c.test_c_arun_matvec_all_dividers', 'test_c.test_c_resume_at_arbitrary_byte', 'test_c.test_c_slowest_ram_clock_meets_tcem']: AssertionError: div 0 group 0: raw acc [145, -62, 29, -153] != model [33, -174, 29, -41]
+[22] CAUGHT: C: single-chunk visit reads 10 bytes (overwrites a with the next chunk)
+      test_c ['test_c.test_c_arun_matvec_all_dividers', 'test_c.test_c_resume_at_arbitrary_byte']: Error: Unable to accurately represent 25.499999999068677(ns) with the simulator precision of 1e-12
+[23] CAUGHT: C: next RAM visit 5 bytes on instead of 10
+      test_c ['test_c.test_c_resume_at_arbitrary_byte', 'test_c.test_c_slowest_ram_clock_meets_tcem']: AssertionError: long group 0: raw acc [260, 359, 950, -788] != model [447, 664, 866, 760]
+[24] CAUGHT: C: no flash resume after a single-chunk visit
+      test_c ['test_c.test_c_arun_matvec_all_dividers', 'test_c.test_c_resume_at_arbitrary_byte']: Error: Unable to accurately represent 25.499999999068677(ns) with the simulator precision of 1e-12
+[25] CAUGHT: C: clk/16 not refused
+      test_c ['test_c.test_c_errors_and_blocking']: AssertionError: clk/16: ASTAT 0x50 != model 0x70
+[26] CAUGHT: C: AWRITE before AINIT accepted
+      test_c ['test_c.test_c_ainit_power_up_reset']: PsramViolation: RAM A: command 0x38 before the power-up reset (66h, 99h)
+[27] CAUGHT: C: opcodes not blocked during a RAM operation
+      test_c ['test_c.test_c_errors_and_blocking']: AssertionError: BLOCKED not set: 0xc0
