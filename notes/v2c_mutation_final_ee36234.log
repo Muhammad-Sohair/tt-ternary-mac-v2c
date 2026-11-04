@@ -1,0 +1,28 @@
+[ 0] SURVIVED: CONTROL (no mutation)
+[ 1] CAUGHT: A: instruction 6Bh -> 6Ch
+[ 2] CAUGHT: A: nibble order swapped
+[ 3] CAUGHT: A: 7 dummy clocks instead of 8
+[ 4] CAUGHT: A: sample point one clk early
+[ 5] CAUGHT: A: compute does not wait for weights
+[ 6] CAUGHT: A: OVERRUN never set
+[ 7] CAUGHT: A: IO0 not released for the dummy clocks
+[ 8] CAUGHT: A: RAM B /CS driven low
+[ 9] CAUGHT: A: write address steps on every nibble
+[10] CAUGHT: A: next chunk one nibble short
+[11] CAUGHT: C: resume at the page start, not the byte
+[12] CAUGHT: C: byte pointer never advances
+[13] CAUGHT: C: pause ignored (flash stays selected)
+[14] CAUGHT: C: RAM read with 5 wait clocks
+[15] CAUGHT: C: RAM read nibbles swapped
+[16] CAUGHT: C: RAM write nibbles swapped
+[17] CAUGHT: C: reset sends 99h without 66h
+[18] CAUGHT: C: address on IO0 only (IO1..3 not enabled)
+[19] SURVIVED: C: RAM used without pausing the flash
+[20] CAUGHT: C: second chunk's activations land in the wrong columns
+[21] CAUGHT: C: first chunk computed one byte early (before a[4] is written)
+[22] CAUGHT: C: single-chunk visit reads 10 bytes (overwrites a with the next chunk)
+[23] CAUGHT: C: next RAM visit 5 bytes on instead of 10
+[24] CAUGHT: C: no flash resume after a single-chunk visit
+[25] CAUGHT: C: clk/16 not refused
+[26] CAUGHT: C: AWRITE before AINIT accepted
+[27] CAUGHT: C: opcodes not blocked during a RAM operation
