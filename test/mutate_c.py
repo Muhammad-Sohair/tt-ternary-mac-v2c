@@ -33,14 +33,14 @@ M = [
      "oe_q  <= 1'b0;               // IOs high-Z", "oe_q  <= 1'b1;               // IOs high-Z"),
     ("A: RAM B /CS driven low", TOP, "assign uio_out = {1'b1, r_csn,", "assign uio_out = {1'b0, r_csn,"),
     ("A: write address steps on every nibble", QF,
-     "        if (hi_half) hi_nib <= in_q;\n        else begin", "        if (hi_half) hi_nib <= in_q;\n        if (1'b1) begin"),
+     "        if (hi_half) hi_nib <= in_q;\n        else waddr", "        if (hi_half) hi_nib <= in_q;\n        if (1'b1) waddr"),
     ("A: next chunk one nibble short", QF,
      "          nib_out <= 2 * CHUNK;\n          nib_in  <= 2 * CHUNK;\n          hi_half <= 1'b1;\n          hcnt    <= half;\n        end else if (pause)",
      "          nib_out <= 2 * CHUNK - 1;\n          nib_in  <= 2 * CHUNK;\n          hi_half <= 1'b1;\n          hcnt    <= half;\n        end else if (pause)"),
     # ---- C: byte pointer and pause/resume (decision R1) ----
     ("C: resume at the page start, not the byte", QF,
      "wire [31:0] cmd_word = {CMD, ptr};", "wire [31:0] cmd_word = {CMD, ptr[23:8], 8'h00};"),
-    ("C: byte pointer never advances", QF, "          ptr   <= ptr + 24'd1;", "          ptr   <= ptr;"),
+    ("C: byte pointer never advances", QF, "else if (grab && !hi_half)  ptr <= ptr + 24'd1;", "else if (grab && !hi_half)  ptr <= ptr;"),
     ("C: pause ignored (flash stays selected)", QF, "        end else if (pause) begin", "        end else if (1'b0) begin"),
     # ---- C: RAM sequencer ----
     ("C: RAM read with 5 wait clocks", PS,
