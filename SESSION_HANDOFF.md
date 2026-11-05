@@ -1,5 +1,70 @@
 # Session handoff — 2026-11-05 (v2c, TMAC2C)
 
+## DECISION (owner, 5 Nov 2026): C is the TT SKY 26d submission
+
+| design | repo | tag / commit | status |
+|---|---|---|---|
+| **C** `tt_um_msohair_tmac2c` | `Muhammad-Sohair/tt-ternary-mac-v2c` | `signoff-c` = debe305, run 41912700855 | **submission**. Clock skew 0.43 ns accepted by the owner (not a violation; STA covers it) |
+| A `tt_um_msohair_tmac2` | `Muhammad-Sohair/tt-ternary-mac-v2` | `signoff-a`, run 40677816085 | **fallback**, untouched |
+| B `tt_um_msohair_tmac2b` (3x2) | `Muhammad-Sohair/tt-ternary-mac-v2b` | d419df3 (final handoff) | **archived**: stopped 1 Nov, v3 input only |
+| v1 `tt_um_msohair_tmac` | `Muhammad-Sohair/tt-ternary-mac` | `signoff-v7` | not submitted |
+
+### Submission details for C (the owner submits and pays; nothing done by me)
+
+- Shuttle **TT SKY 26d** (closes **30 Nov 2026**; allow for GitHub Actions time). App:
+  https://app.tinytapeout.com/projects/create (guides use `?shuttle=ttsky26d`).
+- GitHub repo **`https://github.com/Muhammad-Sohair/tt-ternary-mac-v2c`**, branch `main`.
+- Top module **`tt_um_msohair_tmac2c`**, tiles **2x2** (`info.yaml`), clock 50 MHz. Price checked 27 Oct:
+  70 €/tile → 280 €; re-check on the page.
+- Design commit **debe305** (tag `signoff-c`), GDS run **41912700855**, netlist md5 `50f6b113…`.
+- **Which build the app takes** ("Submit a new revision … fetch the latest build"): whether that is the newest
+  commit's run or the newest successful run is [UNKNOWN] in TT's docs (notes/v2c_04). The commits after debe305
+  change no design file (`src/`, `info.yaml`, `docs/` diffs below), so the tip's own GDS run must reproduce
+  debe305's netlist byte for byte (the flow is deterministic). In the app, confirm the revision shows a `main`
+  commit whose GDS run is green and whose design files equal debe305.
+- C is a **new** project (A was never submitted), so A's top-module name does not come into it.
+- Shipping: TT confirmed on 29 Oct (Claire Elliott, support thread "Shipping SKY 26d chips and devkit to
+  Pakistan?") that they ship to Pakistan, 15 € tracked per devkit, import/customs paid on arrival, HS code
+  8543709990.
+
+### Reset (owner's check before submitting)
+
+- `rst_n` enters a 2-flop synchroniser (`rst_sync`); every register's reset comes from its output, including
+  `qspi_fetch.ptr`'s **asynchronous** reset (the ptr[2] fix is async, but driven from the synchronised
+  reset). So a reset needs clock edges.
+- Devkit `reset()` holds `rst_n` low **10 ms** with the PWM clock running at `PROJECT_HZ` = **1 MHz**:
+  **10,000 rising edges** (measured in `test_devkit_s_stages`, minimum over all 7 resets = 10,000). `setup()`
+  starts the PWM before its first reset; `run_ram` resets before switching to 50 MHz, clock still running.
+- `test_reset.py` (RTL and gate level): 0 edges → no reset (FCFG keeps 0x0A); 1, 2, 3, 10 edges → reset,
+  provided the clock keeps running after release (2 more edges for `rst_sync` to clear). Minimum 1.
+- The fake board now counts clock edges while `rst_n` is low and fails any devkit test whose reset sees
+  < 3 edges; `test_devkit_reset_without_clock_is_caught` proves the check fires (clockless reset flagged, chip
+  state unchanged).
+
+### Devkit RAM-stage harness
+
+**Done and passing against the RTL**: `test_devkit_c.py` runs the script's `run_ram` (R1 init, R2 hand
+example, R3 random ARUN matvecs at /8 and /4, bit-exact) on the strict shared-bus model; 1/1, rerun 5 Nov with
+the reset-edge check. RTL only, as A's devkit tests.
+
+### v3 input
+
+1. **Calibrated `LAYERS_RC` for sky130** (B's root cause: repair uses tech-LEF wire cap ~0.08 fF/µm vs RCX
+   ~0.17–0.21): keep lrc2 (v2b notes v2b_02); both repair slew margins at 20 % (40/55/60 hang or OOM).
+   Upstream open-pdks #251; draft comment in v2b `notes/drafts/`, **not posted** (owner decides).
+2. **B / 8-row array at 3x2**: start from lrc2 and change one thing at a time (clock root first); last run's
+   residual long single-load nets after hold/fan-out buffers are [UNVERIFIED] as to cause (v2b_03).
+3. **CTS**: `CTS_DISTANCE_BETWEEN_BUFFERS` 70 fixes root fanout/cap but doubles skew (0.20 → 0.43 ns) and
+   adds insertion delay; look for a tree that fixes the root without the skew.
+4. **Reconvergent synchronous resets**: synthesis can turn any sync reset into D = Q∧¬Q logic (gate-level X,
+   not a silicon fault, but it hides real results). Use async reset from the synchronised `rst` on state
+   registers and keep the post-reset X scan in the flow.
+5. **SDF simulation**: `test/sdf` (Icarus: patch `*_delayed`, fold INTERCONNECT, grep for `SDF ERROR`).
+   A simulator that runs timing checks (e.g. CVC) would remove the "STA covers setup/hold" caveat [not tried].
+6. **Utilisation**: C is 79.3 % of 2x2; any RAM-path growth (activation buffer, m > 2) needs 3x2, i.e. items 1–2.
+7. **Mutant #19** stays equivalent only while hosts respect f_SCK ≤ f_clk/16; keep the guard in RTL.
+8. Silicon bring-up: run devkit S → F → R stages in that order (R needs F1).
+
 ## Update 2026-11-05 (later): sign-off ambiguity resolved, `signoff-c` tagged at debe305
 
 One table, all rows: **`notes/v2c_06_signoff_evidence.md`** (per-test lines: `notes/v2c_signoff_c_runs.log`).

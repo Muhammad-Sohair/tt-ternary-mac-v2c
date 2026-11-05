@@ -207,3 +207,32 @@
 ** test.test_flash_wait_and_overrun PASS 156610.00 2.53 61876.73 **
 ** test.test_flash_stop_restart_bist FAIL 62170.00 1.12 55262.22 **
 ** TESTS=5 PASS=2 FAIL=3 SKIP=0 410790.00 13.49 30462.74 **
+
+# reset checks, 2026-11-05
+== v2c_gl/test/reset_rtl.log
+30630.00ns INFO cocotb.tb rst_n low for 0 clock edges: FCFG 0x0a -> reset NO
+53130.00ns INFO cocotb.tb rst_n low for 1 clock edges: FCFG 0x05 -> reset yes
+75650.00ns INFO cocotb.tb rst_n low for 2 clock edges: FCFG 0x05 -> reset yes
+98190.00ns INFO cocotb.tb rst_n low for 3 clock edges: FCFG 0x05 -> reset yes
+120870.00ns INFO cocotb.tb rst_n low for 10 clock edges: FCFG 0x05 -> reset yes
+121170.00ns INFO cocotb.tb minimum edges with rst_n low (clock running afterwards): 1; the devkit script holds 10,000
+** test_reset.test_reset_needs_clock_edges PASS 121170.00 0.44 277276.89 **
+** TESTS=1 PASS=1 FAIL=0 SKIP=0 121170.00 0.47 258910.26 **
+== v2c_gl/test/reset_gl.log
+30630.00ns INFO cocotb.tb rst_n low for 0 clock edges: FCFG 0x0a -> reset NO
+53130.00ns INFO cocotb.tb rst_n low for 1 clock edges: FCFG 0x05 -> reset yes
+75650.00ns INFO cocotb.tb rst_n low for 2 clock edges: FCFG 0x05 -> reset yes
+98190.00ns INFO cocotb.tb rst_n low for 3 clock edges: FCFG 0x05 -> reset yes
+120870.00ns INFO cocotb.tb rst_n low for 10 clock edges: FCFG 0x05 -> reset yes
+121170.00ns INFO cocotb.tb minimum edges with rst_n low (clock running afterwards): 1; the devkit script holds 10,000
+** test_reset.test_reset_needs_clock_edges PASS 121170.00 1.94 62523.22 **
+** TESTS=1 PASS=1 FAIL=0 SKIP=0 121170.00 1.98 61042.82 **
+== v2c_gl/test/devkit_rtl2.log
+412100000.00ns INFO cocotb.tb S stages: {'S1': True, 'S2': True, 'S3': True, 'S5': True, 'S6': True, 'S7': True}; clock edges per reset: min 10000, n 7
+** test_devkit.test_devkit_s_stages PASS 412100000.00 38.80 10621955.31 **
+** test_devkit.test_devkit_flash_stages PASS 404075000.00 124.62 3242326.98 **
+** test_devkit.test_devkit_reset_without_clock_is_caught PASS 64760000.00 3.86 16781549.62 **
+** TESTS=3 PASS=3 FAIL=0 SKIP=0 880935000.00 167.33 5264719.59 **
+== v2c_gl/test/devkitc_rtl.log
+** test_devkit_c.test_devkit_ram_stages PASS 61489000.00 78.61 782203.28 **
+** TESTS=1 PASS=1 FAIL=0 SKIP=0 61489000.00 78.64 781894.94 **

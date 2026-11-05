@@ -20,7 +20,7 @@ import sys
 import cocotb
 from cocotb.clock import Clock
 from cocotb.task import bridge, resume
-from cocotb.triggers import Timer
+from cocotb.triggers import RisingEdge, Timer
 
 from test import FlashModel
 from tmac_model import FLASH_ERASED
@@ -172,12 +172,20 @@ class FakeTime:
         _sleep_ns(ms * 1e6 * self._scale())
 
 
+MIN_RESET_EDGES = 3     # rst_sync needs 2 edges to assert rst, +1 for the synchronous-reset registers;
+                        # test_reset.py measures the chip's real minimum (1 edge if the clock keeps running)
+
+
 class FakeTT:
     def __init__(self, dut, w25q):
         self.dut, self.w25q = dut, w25q
         self.selected, self.hz, self.clk_task = False, None, None    # clk_task: the running Clock
         self.ui, self.pico_v, self.pico_oe = 0b0010, 0, 0
         self.errors = []
+        # rst_n reaches the chip through a 2-flop synchroniser (rst_sync); every reset, including the async
+        # reset of qspi_fetch.ptr that is driven from it, needs clock edges while rst_n is low.
+        self.in_reset, self.edges_in_reset, self.reset_edges = False, 0, []
+        cocotb.start_soon(self._count_reset_edges())
         self.ui_in = Port(lambda: self.ui, self._put_ui)
         self.uo_out = Port(lambda: int(_read(dut.uo_out)))
         self.uio_in = Port(self._get_uio, self._put_uio)
@@ -243,7 +251,21 @@ class FakeTT:
         _restart_clock(self, hz)
 
     def reset_project(self, on):
+        if on:
+            self.in_reset, self.edges_in_reset = True, 0
+        elif self.in_reset:
+            self.in_reset = False
+            self.reset_edges.append(self.edges_in_reset)
+            if self.edges_in_reset < MIN_RESET_EDGES:
+                self.errors.append(f"reset released after {self.edges_in_reset} clock edges "
+                                   f"(need >= {MIN_RESET_EDGES} with the clock running)")
         _write(self.dut.rst_n, 0 if on else 1)
+
+    async def _count_reset_edges(self):
+        while True:
+            await RisingEdge(self.dut.clk)
+            if self.in_reset:
+                self.edges_in_reset += 1
 
 
 @resume
@@ -252,6 +274,12 @@ async def _restart_clock(tt, hz):
         tt.clk_task.stop()
     tt.clk_task = Clock(tt.dut.clk, round(1e9 / hz), unit="ns")
     tt.clk_task.start()
+
+
+@resume
+async def _stop_clock(tt):
+    tt.clk_task.stop()
+    tt.clk_task = None
 
 
 def expected_window(t_valid, t_hold=2.0, clk_ns=20):
@@ -291,9 +319,11 @@ async def test_devkit_s_stages(dut):
         return out
 
     out = await bridge(run)()
-    dut._log.info(f"S stages: {out}")
+    dut._log.info(f"S stages: {out}; clock edges per reset: min {min(tt.reset_edges)}, n {len(tt.reset_edges)}")
     assert all(out.values()), out
     assert not tt.errors, tt.errors
+    # B.reset holds rst_n low 10 ms with the PWM clock at PROJECT_HZ = 1 MHz: 10,000 edges
+    assert min(tt.reset_edges) >= 10_000, tt.reset_edges
     assert not flash.commands, "the chip touched the flash during the v1 stages"
 
 
@@ -318,3 +348,32 @@ async def test_devkit_flash_stages(dut):
     assert not tt.errors, tt.errors[:5]
     assert not flash.errors, flash.errors[:5]
     assert {c for c, _ in flash.commands} == {0x6B}
+
+
+@cocotb.test()
+async def test_devkit_reset_without_clock_is_caught(dut):
+    """The board script's reset() with the project clock stopped must be flagged by the fake board
+    (so every devkit test above would fail if the script ever released reset without clock edges),
+    and on the chip such a reset really does nothing: FCFG keeps a non-default value."""
+    tt, _, _ = await board(dut)
+    await bridge(B.setup)(tt)
+    assert not tt.errors, tt.errors
+
+    def clockless():
+        B.xfer(tt, [B.OP_FCFG, 0x0A])                  # non-default divider/sample
+        st = B.fstat(tt)
+        _stop_clock(tt)                                # PWM off
+        B.reset(tt)
+        tt.clock_project_PWM(B.PROJECT_HZ)             # clock back, no reset
+        B.time.sleep_ms(1)
+        return st, B.fstat(tt)
+    before, after = await bridge(clockless)()
+    dut._log.info(f"FSTAT before {before}, after a clockless reset {after}; errors {tt.errors}")
+    assert before[1] == 0x0A
+    assert any("0 clock edges" in e for e in tt.errors), tt.errors
+    assert after[1] == 0x0A, "a reset without clock edges unexpectedly reset FCFG"
+    tt.errors.clear()
+    await bridge(B.reset)(tt)                          # the script's normal reset, clock running
+    st = await bridge(B.fstat)(tt)
+    assert st == (0x02, B.FCFG_RESET), st
+    assert not tt.errors, tt.errors
