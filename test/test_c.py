@@ -71,7 +71,7 @@ class PmodBus:
         self.dut.uio_in.value = v
 
     async def _later(self, delay, fn):
-        await Timer(delay, unit="ns")
+        await Timer(delay, unit="ns", round_mode="round")   # SDF edges fall on fractional ps: round to the 1 ps step
         fn()
 
     def _flash_out(self, nib):

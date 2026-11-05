@@ -1,0 +1,209 @@
+# signoff-c evidence runs, 2026-11-05 (netlist 41912700855 unless noted). Per-test lines from each cocotb log.
+== v2c_gl/test/final_rtl_a.log  SDF_errors_or_warnings=0
+** test.test_reset_state PASS 89730.00 0.36 249944.29 **
+** test.test_decoder_exhaustive PASS 5651330.00 25.44 222169.67 **
+** test.test_random_matvec PASS 4761890.00 23.47 202901.27 **
+** test.test_streamed_matvec PASS 479010.00 2.50 191604.00 **
+** test.test_shift_floor_semantics PASS 694370.00 3.66 189926.15 **
+** test.test_readout_saturation PASS 395490.00 1.95 202503.84 **
+** test.test_internal_saturation PASS 40330850.00 195.22 206592.85 **
+** test.test_bist PASS 165930.00 0.81 204347.29 **
+** test.test_spi_abort_and_reset PASS 192670.00 0.95 202172.09 **
+** test.test_flash_pins_reset PASS 73890.00 0.36 205250.00 **
+** test.test_flash_matvec PASS 2861330.00 15.14 188991.41 **
+** test.test_flash_timing_windows PASS 397210.00 1.95 203384.54 **
+** test.test_flash_wait_and_overrun PASS 156610.00 0.72 217816.41 **
+** test.test_flash_stop_restart_bist PASS 343870.00 1.77 194716.87 **
+** TESTS=14 PASS=14 FAIL=0 SKIP=0 56594180.01 274.34 206289.11 **
+== v2c_gl/test/final_gl_a.log  SDF_errors_or_warnings=0
+** test.test_reset_state PASS 89730.00 1.62 55218.46 **
+** test.test_decoder_exhaustive PASS 5651330.00 134.64 41973.32 **
+** test.test_random_matvec PASS 1428770.00 37.84 37755.20 **
+** test.test_streamed_matvec PASS 363810.00 8.70 41798.02 **
+** test.test_shift_floor_semantics PASS 694370.00 16.05 43273.71 **
+** test.test_readout_saturation PASS 395490.00 7.78 50821.13 **
+** test.test_internal_saturation PASS 40330850.00 879.19 45872.89 **
+** test.test_bist PASS 165930.00 5.70 29095.21 **
+** test.test_spi_abort_and_reset PASS 192670.00 2.84 67746.13 **
+** test.test_flash_pins_reset PASS 73890.00 1.12 65680.00 **
+** test.test_flash_matvec PASS 473770.00 9.62 49222.86 **
+** test.test_flash_timing_windows PASS 151890.00 2.31 65667.96 **
+** test.test_flash_wait_and_overrun PASS 156610.00 2.38 65941.05 **
+** test.test_flash_stop_restart_bist PASS 343870.00 8.30 41450.10 **
+** TESTS=14 PASS=14 FAIL=0 SKIP=0 50512980.01 1118.16 45175.25 **
+== v2c_gl/test/rf_rtl_c.log  SDF_errors_or_warnings=0
+** test_c.test_c_reset_state PASS 79490.00 0.36 220805.56 **
+** test_c.test_c_ainit_power_up_reset PASS 196450.00 0.73 267643.05 **
+** test_c.test_c_awrite_storage PASS 219010.00 0.97 226016.51 **
+** test_c.test_c_arun_matvec_all_dividers PASS 864990.00 3.52 246015.36 **
+** test_c.test_c_resume_at_arbitrary_byte PASS 1640650.00 8.75 187502.86 **
+** test_c.test_c_errors_and_blocking PASS 4139910.00 16.91 244878.15 **
+** test_c.test_c_awrite_overrun PASS 56930.00 0.23 243290.60 **
+** test_c.test_c_slowest_ram_clock_meets_tcem PASS 658010.00 2.72 242004.41 **
+** test_c.test_c_dead_ram_chip_still_behaves_like_a PASS 241970.00 1.05 231107.93 **
+** test_c.test_c_arbiter_waits_for_flash_cs_high PASS 206810.00 1.17 176459.04 **
+** TESTS=10 PASS=10 FAIL=0 SKIP=0 8304220.01 36.44 227899.99 **
+== v2c_gl/test/rf_gl_c.log  SDF_errors_or_warnings=0
+** test_c.test_c_reset_state PASS 79490.00 1.41 56536.27 **
+** test_c.test_c_ainit_power_up_reset PASS 196450.00 2.94 66865.21 **
+** test_c.test_c_awrite_storage PASS 219010.00 3.73 58652.92 **
+** test_c.test_c_arun_matvec_all_dividers PASS 864990.00 17.81 48562.21 **
+** test_c.test_c_resume_at_arbitrary_byte PASS 1640650.00 37.83 43370.17 **
+** test_c.test_c_errors_and_blocking PASS 4139910.00 76.88 53852.49 **
+** test_c.test_c_awrite_overrun PASS 56930.00 0.78 72893.73 **
+** test_c.test_c_slowest_ram_clock_meets_tcem PASS 658010.00 11.00 59819.09 **
+** test_c.test_c_dead_ram_chip_still_behaves_like_a PASS 241970.00 5.48 44122.90 **
+** test_c.test_c_arbiter_waits_for_flash_cs_high PASS 206810.00 2.72 76061.05 **
+** TESTS=10 PASS=10 FAIL=0 SKIP=0 8304220.01 160.62 51699.42 **
+== v2c_gl/test/glcts_f.log  SDF_errors_or_warnings=0
+** test_float.test_float_inputs_v1_flow PASS 117470.00 2.28 51476.77 **
+** TESTS=1 PASS=1 FAIL=0 SKIP=0 117470.00 2.33 50459.62 **
+== v2c_gl/sdf/sdf_max_ss_100C_1v60_test.log  SDF_errors_or_warnings=0
+** test.test_reset_state PASS 89730.00 10.47 8571.02 **
+** test.test_decoder_exhaustive PASS 5651330.00 105.50 53567.11 **
+** test.test_random_matvec PASS 4761890.00 88.48 53816.40 **
+** test.test_streamed_matvec PASS 479010.00 9.33 51351.84 **
+** test.test_shift_floor_semantics PASS 694370.00 12.50 55549.60 **
+** test.test_readout_saturation PASS 395490.00 7.53 52507.97 **
+** test.test_internal_saturation PASS 40330850.00 760.95 53000.45 **
+** test.test_bist PASS 165930.00 3.81 43528.33 **
+** test.test_spi_abort_and_reset PASS 192670.00 2.83 68129.42 **
+** test.test_flash_pins_reset PASS 73890.00 1.06 69510.82 **
+** test.test_flash_matvec PASS 2861330.00 44.67 64051.98 **
+** test.test_flash_timing_windows PASS 397210.00 6.08 65352.09 **
+** test.test_flash_wait_and_overrun PASS 156610.00 2.33 67272.34 **
+** test.test_flash_stop_restart_bist PASS 343870.00 5.88 58531.06 **
+** TESTS=14 PASS=14 FAIL=0 SKIP=0 56594180.01 1061.45 53317.65 **
+== v2c_gl/sdf/sdf_min_ff_n40C_1v95_test.log  SDF_errors_or_warnings=0
+** test.test_reset_state PASS 89730.00 10.69 8395.40 **
+** test.test_decoder_exhaustive PASS 5651330.00 107.78 52433.45 **
+** test.test_random_matvec PASS 4761890.00 90.70 52499.81 **
+** test.test_streamed_matvec PASS 479010.00 9.42 50839.52 **
+** test.test_shift_floor_semantics PASS 694370.00 13.08 53094.51 **
+** test.test_readout_saturation PASS 395490.00 7.73 51129.93 **
+** test.test_internal_saturation PASS 40330850.00 758.58 53166.38 **
+** test.test_bist PASS 165930.00 3.69 45004.07 **
+** test.test_spi_abort_and_reset PASS 192670.00 2.81 68492.71 **
+** test.test_flash_pins_reset PASS 73890.00 1.08 68543.60 **
+** test.test_flash_matvec PASS 2861330.00 44.09 64891.60 **
+** test.test_flash_timing_windows PASS 397210.00 5.98 66378.68 **
+** test.test_flash_wait_and_overrun PASS 156610.00 2.23 70102.95 **
+** test.test_flash_stop_restart_bist PASS 343870.00 6.00 57311.67 **
+** TESTS=14 PASS=14 FAIL=0 SKIP=0 56594180.01 1063.92 53193.92 **
+== v2c_gl/sdf/sdf_nom_tt_025C_1v80_test.log  SDF_errors_or_warnings=0
+** test.test_reset_state PASS 89730.00 10.53 8520.56 **
+** test.test_decoder_exhaustive PASS 5651330.00 108.80 51943.80 **
+** test.test_random_matvec PASS 4761890.00 91.95 51786.13 **
+** test.test_streamed_matvec PASS 479010.00 9.45 50672.80 **
+** test.test_shift_floor_semantics PASS 694370.00 12.94 53669.04 **
+** test.test_readout_saturation PASS 395490.00 8.00 49436.25 **
+** test.test_internal_saturation PASS 40330850.00 760.58 53026.58 **
+** test.test_bist PASS 165930.00 3.64 45572.64 **
+** test.test_spi_abort_and_reset PASS 192670.00 2.83 68129.42 **
+** test.test_flash_pins_reset PASS 73890.00 1.03 71668.28 **
+** test.test_flash_matvec PASS 2861330.00 44.12 64846.01 **
+** test.test_flash_timing_windows PASS 397210.00 6.09 65180.51 **
+** test.test_flash_wait_and_overrun PASS 156610.00 2.31 67737.89 **
+** test.test_flash_stop_restart_bist PASS 343870.00 6.14 55995.77 **
+** TESTS=14 PASS=14 FAIL=0 SKIP=0 56594180.01 1068.47 52967.55 **
+== v2c_gl/sdf/sdfgl_max_ss_100C_1v60_test_c.log  SDF_errors_or_warnings=0
+** test_c.test_c_reset_state PASS 79490.00 7.38 10778.31 **
+** test_c.test_c_ainit_power_up_reset PASS 196450.00 3.16 62226.80 **
+** test_c.test_c_awrite_storage PASS 219010.00 3.97 55194.05 **
+** test_c.test_c_arun_matvec_all_dividers PASS 864990.00 14.05 61578.27 **
+** test_c.test_c_resume_at_arbitrary_byte PASS 1640650.00 35.61 46072.73 **
+** test_c.test_c_errors_and_blocking PASS 4139910.00 71.33 58040.46 **
+** test_c.test_c_awrite_overrun PASS 56930.00 1.05 54374.40 **
+** test_c.test_c_slowest_ram_clock_meets_tcem PASS 658010.00 11.27 58411.90 **
+** test_c.test_c_dead_ram_chip_still_behaves_like_a PASS 241970.00 4.34 55702.12 **
+** test_c.test_c_arbiter_waits_for_flash_cs_high PASS 206810.00 3.39 60987.91 **
+** TESTS=10 PASS=10 FAIL=0 SKIP=0 8304220.01 155.56 53381.72 **
+== v2c_gl/sdf/sdfgl_max_ss_100C_1v60_test_float.log  SDF_errors_or_warnings=0
+** test_float.test_float_inputs_v1_flow PASS 117470.00 8.33 14105.43 **
+** TESTS=1 PASS=1 FAIL=0 SKIP=0 117470.00 8.36 14053.12 **
+== v2c_gl/sdf/sdfgl_min_ff_n40C_1v95_test_c.log  SDF_errors_or_warnings=0
+** test_c.test_c_reset_state PASS 79490.00 7.31 10869.68 **
+** test_c.test_c_ainit_power_up_reset PASS 196450.00 2.94 66887.98 **
+** test_c.test_c_awrite_storage PASS 219010.00 3.78 57908.51 **
+** test_c.test_c_arun_matvec_all_dividers PASS 864990.00 13.81 62625.98 **
+** test_c.test_c_resume_at_arbitrary_byte PASS 1640650.00 34.50 47555.07 **
+** test_c.test_c_errors_and_blocking PASS 4139910.00 68.56 60381.11 **
+** test_c.test_c_awrite_overrun PASS 56930.00 0.97 58811.98 **
+** test_c.test_c_slowest_ram_clock_meets_tcem PASS 658010.00 10.86 60590.24 **
+** test_c.test_c_dead_ram_chip_still_behaves_like_a PASS 241970.00 4.17 57998.56 **
+** test_c.test_c_arbiter_waits_for_flash_cs_high PASS 206810.00 3.20 64567.59 **
+** TESTS=10 PASS=10 FAIL=0 SKIP=0 8304220.01 150.14 55309.48 **
+== v2c_gl/sdf/sdfgl_min_ff_n40C_1v95_test_float.log  SDF_errors_or_warnings=0
+** test_float.test_float_inputs_v1_flow PASS 117470.00 8.42 13947.99 **
+** TESTS=1 PASS=1 FAIL=0 SKIP=0 117470.00 8.47 13870.59 **
+== v2c_gl/sdf/sdfgl_nom_tt_025C_1v80_test_c.log  SDF_errors_or_warnings=0
+** test_c.test_c_reset_state PASS 79490.00 7.33 10847.43 **
+** test_c.test_c_ainit_power_up_reset PASS 196450.00 3.05 64473.25 **
+** test_c.test_c_awrite_storage PASS 219010.00 3.84 56974.51 **
+** test_c.test_c_arun_matvec_all_dividers PASS 864990.00 14.09 61372.92 **
+** test_c.test_c_resume_at_arbitrary_byte PASS 1640650.00 34.91 47001.95 **
+** test_c.test_c_errors_and_blocking PASS 4139910.00 69.66 59433.65 **
+** test_c.test_c_awrite_overrun PASS 56930.00 0.97 58751.29 **
+** test_c.test_c_slowest_ram_clock_meets_tcem PASS 658010.00 10.97 59988.15 **
+** test_c.test_c_dead_ram_chip_still_behaves_like_a PASS 241970.00 4.17 57998.56 **
+** test_c.test_c_arbiter_waits_for_flash_cs_high PASS 206810.00 3.31 62442.63 **
+** TESTS=10 PASS=10 FAIL=0 SKIP=0 8304220.01 152.36 54504.30 **
+== v2c_gl/sdf/sdfgl_nom_tt_025C_1v80_test_float.log  SDF_errors_or_warnings=0
+** test_float.test_float_inputs_v1_flow PASS 117470.00 8.56 13719.93 **
+** TESTS=1 PASS=1 FAIL=0 SKIP=0 117470.00 8.59 13668.84 **
+== v2c_gl/sdf/chk_max_ss_100C_1v60.log  SDF_errors_or_warnings=0
+300.00ns INFO cocotb.tb _8004_ rise insertion 171.356 ns
+300.00ns INFO cocotb.tb _7931_ rise insertion 171.632 ns
+300.00ns INFO cocotb.tb flops 557/557: insertion min 171.356 max 171.632 skew 0.276 ns
+** test_sdfprobe.sdf_probe PASS 170.00 7.89 21.55 **
+** test_sdfclk.sdf_clk PASS 130.00 2.45 53.00 **
+** TESTS=2 PASS=2 FAIL=0 SKIP=0 300.00 10.39 28.87 **
+== v2c_gl/sdf/chk_min_ff_n40C_1v95.log  SDF_errors_or_warnings=0
+300.00ns INFO cocotb.tb _8004_ rise insertion 170.500 ns
+300.00ns INFO cocotb.tb _7931_ rise insertion 170.600 ns
+300.00ns INFO cocotb.tb flops 557/557: insertion min 170.500 max 170.602 skew 0.102 ns
+** test_sdfprobe.sdf_probe PASS 170.00 7.69 22.11 **
+** test_sdfclk.sdf_clk PASS 130.00 2.31 56.23 **
+** TESTS=2 PASS=2 FAIL=0 SKIP=0 300.00 10.05 29.86 **
+== v2c_gl/sdf_old/old_max_ss_100C_1v60_pwrup_0.log  SDF_errors_or_warnings=0
+** test.test_flash_pins_reset PASS 73890.00 9.12 8097.53 **
+** test.test_flash_matvec PASS 2861330.00 74.14 38593.09 **
+** test.test_flash_timing_windows PASS 397210.00 8.30 47873.93 **
+** test.test_flash_wait_and_overrun PASS 156610.00 3.14 49859.92 **
+** test.test_flash_stop_restart_bist PASS 343870.00 11.56 29741.39 **
+** TESTS=5 PASS=5 FAIL=0 SKIP=0 3832910.00 106.31 36053.41 **
+== v2c_gl/sdf_old/old_max_ss_100C_1v60_pwrup_1.log  SDF_errors_or_warnings=0
+** test.test_flash_pins_reset PASS 73890.00 8.58 8613.90 **
+** test.test_flash_matvec PASS 2861330.00 58.56 48859.01 **
+** test.test_flash_timing_windows PASS 397210.00 8.11 48983.85 **
+** test.test_flash_wait_and_overrun PASS 156610.00 2.95 53034.20 **
+** test.test_flash_stop_restart_bist PASS 343870.00 7.66 44915.10 **
+** TESTS=5 PASS=5 FAIL=0 SKIP=0 3832910.00 85.89 44625.80 **
+== v2c_gl/sdf_old/old_max_ss_100C_1v60_pwrup_none.log  SDF_errors_or_warnings=0
+** test.test_flash_pins_reset PASS 73890.00 9.59 7702.49 **
+** test.test_flash_matvec FAIL 83610.00 1.75 47777.14 **
+** test.test_flash_timing_windows FAIL 34510.00 0.67 51354.17 **
+** test.test_flash_wait_and_overrun PASS 156610.00 2.78 56314.28 **
+** test.test_flash_stop_restart_bist FAIL 62170.00 1.19 52375.74 **
+** TESTS=5 PASS=2 FAIL=3 SKIP=0 410790.00 16.05 25600.77 **
+== v2c_gl/sdf_old/old_min_ff_n40C_1v95_pwrup_0.log  SDF_errors_or_warnings=0
+** test.test_flash_pins_reset PASS 73890.00 8.30 8905.63 **
+** test.test_flash_matvec PASS 2861330.00 56.00 51095.18 **
+** test.test_flash_timing_windows PASS 397210.00 7.64 51990.84 **
+** test.test_flash_wait_and_overrun PASS 156610.00 2.84 55066.81 **
+** test.test_flash_stop_restart_bist PASS 343870.00 7.39 46525.50 **
+** TESTS=5 PASS=5 FAIL=0 SKIP=0 3832910.00 82.22 46618.30 **
+== v2c_gl/sdf_old/old_min_ff_n40C_1v95_pwrup_1.log  SDF_errors_or_warnings=0
+** test.test_flash_pins_reset PASS 73890.00 7.99 9253.60 **
+** test.test_flash_matvec PASS 2861330.00 55.44 51614.08 **
+** test.test_flash_timing_windows PASS 397210.00 7.56 52520.16 **
+** test.test_flash_wait_and_overrun PASS 156610.00 2.81 55693.46 **
+** test.test_flash_stop_restart_bist PASS 343870.00 7.39 46525.50 **
+** TESTS=5 PASS=5 FAIL=0 SKIP=0 3832910.00 81.22 47192.28 **
+== v2c_gl/sdf_old/old_min_ff_n40C_1v95_pwrup_none.log  SDF_errors_or_warnings=0
+** test.test_flash_pins_reset PASS 73890.00 7.67 9631.13 **
+** test.test_flash_matvec FAIL 83610.00 1.48 56340.97 **
+** test.test_flash_timing_windows FAIL 34510.00 0.61 56573.77 **
+** test.test_flash_wait_and_overrun PASS 156610.00 2.53 61876.73 **
+** test.test_flash_stop_restart_bist FAIL 62170.00 1.12 55262.22 **
+** TESTS=5 PASS=2 FAIL=3 SKIP=0 410790.00 13.49 30462.74 **

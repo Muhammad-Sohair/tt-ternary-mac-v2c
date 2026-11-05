@@ -1,4 +1,18 @@
-# Session handoff — 2026-11-05 (v2c, TMAC2C) — overnight run
+# Session handoff — 2026-11-05 (v2c, TMAC2C)
+
+## Update 2026-11-05 (later): sign-off ambiguity resolved, `signoff-c` tagged at debe305
+
+One table, all rows: **`notes/v2c_06_signoff_evidence.md`** (per-test lines: `notes/v2c_signoff_c_runs.log`).
+Candidate debe305 / run 41912700855. A's suite 14/14 RTL and 14/14 gate level (unit delay, one run) and
+14/14 with **SDF back-annotation at max_ss, min_ff and nom_tt**; C `test_c` 10/10 and `test_float` 1/1 at
+RTL, unit GL and SDF ×3. The old "3 flash GL failures" were netlist 41902595956 and are proven with SDF to be
+X-pessimism (not timing, not a netlist defect). Cap violation (clock root 0.211/0.200 pF, run 41909979592)
+cleared. SDF method limits (Icarus: no timing checks, INTERCONNECT folded) are in v2c_06 §2. One testbench
+change (Timer rounding to 1 ps, v2c_06 §3). Still open for you: §5 items 2 (skew) and 3 (C vs A submission).
+
+---
+
+(Overnight handoff below, unchanged.)
 
 A (`tt-ternary-mac-v2`, `signoff-a`) and B (`tt-ternary-mac-v2b`) were not touched. Nothing submitted, paid,
 posted, or changed in GitHub settings. All work is on `Muhammad-Sohair/tt-ternary-mac-v2c` `main`.
